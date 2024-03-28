@@ -10,11 +10,7 @@ import gleam/io
 import gleam/string
 import gleam/result
 import server/error
-
-// dependency type represents data sent from outside world
-pub type Dependency {
-  Dependency(name: String, version: String)
-}
+import common
 
 pub type NpmPackage {
   NpmPackage(repository: NpmRepository)
@@ -45,24 +41,22 @@ pub fn handle_request(req: Request) -> wisp.Response {
 }
 
 fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
-  let decoded_deps = decode_dependencies(json)
+  let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {
     Ok(deps) -> {
       let x =
         list.map(deps, get_repository_details_from_npm)
         |> io.debug()
-      // list.try_map(deps, get_repository_details_from_npm)
-      // |> io.debug()
 
-      wisp.json_response(encode_dependencies(deps), 200)
+      wisp.json_response(common.encode_dependencies(deps), 200)
     }
     Error(_) -> wisp.unprocessable_entity()
   }
 }
 
 pub fn get_repository_details_from_npm(
-  dependency: Dependency,
+  dependency: common.Dependency,
 ) -> Result(Repository, error.Error) {
   let package_details = get_package_details(dependency)
 
@@ -74,7 +68,7 @@ pub fn get_repository_details_from_npm(
 
 pub fn extract_repository_details(
   package: NpmPackage,
-  dependency: Dependency,
+  dependency: common.Dependency,
 ) -> Repository {
   let split = string.split(package.repository.url, "/")
 
@@ -91,7 +85,7 @@ pub fn extract_repository_details(
 }
 
 fn get_package_details(
-  dependency: Dependency,
+  dependency: common.Dependency,
 ) -> Result(NpmPackage, error.Error) {
   let assert Ok(response_) =
     request.new()
@@ -126,31 +120,30 @@ pub fn decode_repository() -> fn(Dynamic) ->
     dynamic.field("url", dynamic.string),
   )
 }
+// fn decode_dependency() -> fn(Dynamic) ->
+//   Result(Dependency, List(dynamic.DecodeError)) {
+//   dynamic.decode2(
+//     Dependency,
+//     dynamic.field("name", dynamic.string),
+//     dynamic.field("version", dynamic.string),
+//   )
+// }
 
-fn decode_dependency() -> fn(Dynamic) ->
-  Result(Dependency, List(dynamic.DecodeError)) {
-  dynamic.decode2(
-    Dependency,
-    dynamic.field("name", dynamic.string),
-    dynamic.field("version", dynamic.string),
-  )
-}
+// fn decode_dependencies(
+//   json: Dynamic,
+// ) -> Result(List(Dependency), dynamic.DecodeErrors) {
+//   let decoder = dynamic.list(of: decode_dependency())
+//   decoder(json)
+// }
 
-fn decode_dependencies(
-  json: Dynamic,
-) -> Result(List(Dependency), dynamic.DecodeErrors) {
-  let decoder = dynamic.list(of: decode_dependency())
-  decoder(json)
-}
-
-// curl request
-//  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "typescript", "version": "5.3.2"}, {"name": "zod", "version": "3.7.0"},  {"name": "idb", "version": "8.0.0"}]' http://localhost:8080/dependencies
-fn encode_dependencies(dependencies: List(Dependency)) {
-  json.array(dependencies, fn(dependency) {
-    json.object([
-      #("name", json.string(dependency.name)),
-      #("version", json.string(dependency.version)),
-    ])
-  })
-  |> json.to_string_builder()
-}
+// // curl request
+// //  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "typescript", "version": "5.3.2"}, {"name": "zod", "version": "3.7.0"},  {"name": "idb", "version": "8.0.0"}]' http://localhost:8080/dependencies
+// fn encode_dependencies(dependencies: List(Dependency)) {
+//   json.array(dependencies, fn(dependency) {
+//     json.object([
+//       #("name", json.string(dependency.name)),
+//       #("version", json.string(dependency.version)),
+//     ])
+//   })
+//   |> json.to_string_builder()
+// }
