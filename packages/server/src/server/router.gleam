@@ -3,28 +3,51 @@ import server/web
 import gleam/http.{Get, Post}
 import gleam/httpc
 import gleam/http/request
+import gleam/http/response
 import gleam/dynamic.{type Dynamic}
 import gleam/json
 import gleam/list
 import gleam/io
-import gleam/string
 import gleam/result
 import server/error
 import common
+import server/npm
+import server/verl
+import gleam/bool
 
-pub type NpmPackage {
-  NpmPackage(repository: NpmRepository)
+pub type GithubRelease {
+  GithubRelease(
+    tag_name: String,
+    name: String,
+    // body: String,
+    created_at: String,
+    html_url: String,
+    prerelease: Bool,
+    draft: Bool,
+  )
 }
 
-pub type NpmRepository {
-  NpmRepository(type_: String, url: String)
+pub type GithubReleaseWithDependencyName {
+  GithubReleaseWithDependencyName(
+    tag_name: String,
+    name: String,
+    dependency_name: String,
+    dependency_version: String,
+    created_at: String,
+    html_url: String,
+    prerelease: Bool,
+    draft: Bool,
+  )
 }
 
-pub type Repository {
-  Repository(
-    github_owner: String,
-    github_name: String,
-    version: String,
+pub type Release {
+  Release(
+    tag_name: String,
+    name: String,
+    version: verl.Version,
+    url: String,
+    // body: String,
+    created_at: String,
     dependency_name: String,
   )
 }
@@ -45,105 +68,165 @@ fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
 
   case decoded_deps {
     Ok(deps) -> {
-      let x =
-        list.map(deps, get_repository_details_from_npm)
+      let repositories =
+        list.map(deps, npm.get_repository_meta_from_npm)
+        |> result.values()
+
+      let releases =
+        list.map(repositories, get_releases_for_repository)
+        |> result.values()
+        |> list.flatten()
+        |> filter_github_releases()
+        |> from_github_releases()
         |> io.debug()
 
+      io.debug(list.length(of: releases))
       wisp.json_response(common.encode_dependencies(deps), 200)
     }
     Error(_) -> wisp.unprocessable_entity()
   }
 }
 
-pub fn get_repository_details_from_npm(
-  dependency: common.Dependency,
-) -> Result(Repository, error.Error) {
-  let package_details = get_package_details(dependency)
+pub fn get_releases_for_repository(
+  repository: npm.RepositoryMeta,
+) -> Result(List(GithubReleaseWithDependencyName), error.Error) {
+  let github_releases = fetch_releases_from_github(repository)
+  let with_dep_name = with_dependency_name(repository, github_releases)
+  // todo: implement filtering of releases
+}
 
-  case package_details {
-    Ok(package) -> Ok(extract_repository_details(package, dependency))
-    Error(err) -> Error(err)
+fn bool_from_result(result: Result(a, b)) -> Bool {
+  case result {
+    Ok(_) -> True
+    Error(_) -> False
   }
 }
 
-pub fn extract_repository_details(
-  package: NpmPackage,
-  dependency: common.Dependency,
-) -> Repository {
-  let split = string.split(package.repository.url, "/")
+pub fn filter_github_releases(
+  github_releases: List(GithubReleaseWithDependencyName),
+) -> List(GithubReleaseWithDependencyName) {
+  list.filter(github_releases, fn(release) {
+    let is_valid_version =
+      bool_from_result(verl.parse(release.dependency_version))
 
-  let assert Ok(github_owner) = list.at(split, 3)
-  let assert Ok(repository_name) = list.at(split, 4)
-  let github_name = string.replace(repository_name, ".git", "")
-
-  Repository(
-    github_name,
-    github_owner,
-    dependency_name: dependency.name,
-    version: dependency.version,
-  )
+    bool.negate(release.draft)
+    && bool.negate(release.prerelease)
+    && is_valid_version
+  })
 }
 
-fn get_package_details(
-  dependency: common.Dependency,
-) -> Result(NpmPackage, error.Error) {
+pub fn get_newer_releases(
+  releases: List(GithubRelease),
+  current_version: verl.Version,
+) -> List(GithubRelease) {
+  todo
+}
+
+pub fn from_github_releases(
+  github_releases: List(GithubReleaseWithDependencyName),
+) -> List(Release) {
+  list.map(github_releases, fn(release) {
+    let assert Ok(version) = verl.parse(release.dependency_version)
+
+    Release(
+      tag_name: release.tag_name,
+      name: release.name,
+      version: version,
+      created_at: release.created_at,
+      url: release.html_url,
+      dependency_name: release.dependency_name,
+    )
+  })
+}
+
+pub fn with_dependency_name(
+  repository: npm.RepositoryMeta,
+  github_releases: Result(List(GithubRelease), error.Error),
+) -> Result(List(GithubReleaseWithDependencyName), error.Error) {
+  result.map(github_releases, fn(releases) {
+    list.map(releases, fn(release) {
+      GithubReleaseWithDependencyName(
+        tag_name: release.tag_name,
+        name: release.name,
+        dependency_name: repository.dependency_name,
+        dependency_version: repository.version,
+        created_at: release.created_at,
+        html_url: release.html_url,
+        prerelease: release.prerelease,
+        draft: release.draft,
+      )
+    })
+  })
+}
+
+pub fn fetch_releases_from_github(
+  repository: npm.RepositoryMeta,
+) -> Result(List(GithubRelease), error.Error) {
+  let path = craft_github_request_path(repository)
+
   let assert Ok(response_) =
     request.new()
     |> request.set_method(Get)
-    |> request.set_host("registry.npmjs.org")
-    |> request.set_path("/" <> dependency.name)
+    |> request.set_host("api.github.com")
+    |> request.set_path(path)
+    |> request.set_header("User-Agent", "gleam-whats-changed-app")
     |> request.set_header("Content-Type", "application/json")
+    |> request.set_header(
+      "Authorization",
+      "Bearer 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",
+    )
     |> httpc.send()
 
-  case response_.status {
-    200 -> {
-      json.decode(response_.body, decode_npm_package())
-      |> result.map_error(error.JsonDecodeError)
+  let assert Ok(rate_limit_remaining) =
+    response.get_header(response_, "x-ratelimit-remaining")
+
+  case rate_limit_remaining {
+    "0" ->
+      Error(error.http_rate_limit_exceeded(
+        dependency_name: repository.dependency_name,
+      ))
+    _ -> {
+      case response_.status {
+        200 -> {
+          json.decode(response_.body, decode_releases())
+          |> result.map_error(error.JsonDecodeError)
+        }
+        404 -> {
+          Error(error.http_not_found_error(
+            dependency_name: repository.dependency_name,
+          ))
+        }
+        code ->
+          Error(error.http_unexpected_error(
+            status_code: code,
+            dependency_name: repository.dependency_name,
+          ))
+      }
     }
-    404 -> {
-      Error(error.http_not_found_error(dependency_name: dependency.name))
-    }
-    _ -> Error(error.http_unexpected_error(dependency_name: dependency.name))
   }
 }
 
-pub fn decode_npm_package() -> fn(Dynamic) ->
-  Result(NpmPackage, List(dynamic.DecodeError)) {
-  dynamic.decode1(NpmPackage, dynamic.field("repository", decode_repository()))
+pub fn craft_github_request_path(repository: npm.RepositoryMeta) -> String {
+  "/repos/"
+  <> repository.github_owner
+  <> "/"
+  <> repository.github_name
+  <> "/releases"
+  <> "?per_page=100"
 }
 
-pub fn decode_repository() -> fn(Dynamic) ->
-  Result(NpmRepository, List(dynamic.DecodeError)) {
-  dynamic.decode2(
-    NpmRepository,
-    dynamic.field("type", dynamic.string),
-    dynamic.field("url", dynamic.string),
-  )
+pub fn decode_releases() -> fn(Dynamic) ->
+  Result(List(GithubRelease), List(dynamic.DecodeError)) {
+  let release_decoder =
+    dynamic.decode6(
+      GithubRelease,
+      dynamic.field("tag_name", dynamic.string),
+      dynamic.field("name", dynamic.string),
+      dynamic.field("created_at", dynamic.string),
+      dynamic.field("html_url", dynamic.string),
+      dynamic.field("prerelease", dynamic.bool),
+      dynamic.field("draft", dynamic.bool),
+    )
+
+  dynamic.list(release_decoder)
 }
-// fn decode_dependency() -> fn(Dynamic) ->
-//   Result(Dependency, List(dynamic.DecodeError)) {
-//   dynamic.decode2(
-//     Dependency,
-//     dynamic.field("name", dynamic.string),
-//     dynamic.field("version", dynamic.string),
-//   )
-// }
-
-// fn decode_dependencies(
-//   json: Dynamic,
-// ) -> Result(List(Dependency), dynamic.DecodeErrors) {
-//   let decoder = dynamic.list(of: decode_dependency())
-//   decoder(json)
-// }
-
-// // curl request
-// //  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "typescript", "version": "5.3.2"}, {"name": "zod", "version": "3.7.0"},  {"name": "idb", "version": "8.0.0"}]' http://localhost:8080/dependencies
-// fn encode_dependencies(dependencies: List(Dependency)) {
-//   json.array(dependencies, fn(dependency) {
-//     json.object([
-//       #("name", json.string(dependency.name)),
-//       #("version", json.string(dependency.version)),
-//     ])
-//   })
-//   |> json.to_string_builder()
-// }

@@ -24,7 +24,8 @@ pub fn decode_dependencies(
 }
 
 // curl request
-//  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "typescript", "version": "5.3.2"}, {"name": "zod", "version": "3.7.0"},  {"name": "idb", "version": "8.0.0"}]' http://localhost:8080/dependencies
+//  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "typescript", "version": "5.3.2"}, {"name": "zod", "version": "3.7.0"},  {"name": "idb", "version": "8.0.0"}, {"name": "pooweebumpoolick", "version": "8.0.0"}]' http://localhost:8080/dependencies
+//  curl -v -X POST -H "Content-Type: application/json" -d '[{"name": "idb", "version": "8.0.0"}]' http://localhost:8080/dependencies
 pub fn encode_dependencies(dependencies: List(Dependency)) {
   json.array(dependencies, fn(dependency) {
     json.object([
