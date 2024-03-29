@@ -14,7 +14,10 @@ import common
 import server/npm
 import server/verl
 import gleam/bool
+import gleam/string
+import gleam/int
 
+// what comes back from githubs releases api
 pub type GithubRelease {
   GithubRelease(
     tag_name: String,
@@ -32,7 +35,6 @@ pub type GithubReleaseWithDependencyName {
     tag_name: String,
     name: String,
     dependency_name: String,
-    dependency_version: String,
     created_at: String,
     html_url: String,
     prerelease: Bool,
@@ -46,7 +48,6 @@ pub type Release {
     name: String,
     version: verl.Version,
     url: String,
-    // body: String,
     created_at: String,
     dependency_name: String,
   )
@@ -72,15 +73,12 @@ fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
         list.map(deps, npm.get_repository_meta_from_npm)
         |> result.values()
 
-      let releases =
+      let _ =
         list.map(repositories, get_releases_for_repository)
         |> result.values()
         |> list.flatten()
-        |> filter_github_releases()
-        |> from_github_releases()
         |> io.debug()
 
-      io.debug(list.length(of: releases))
       wisp.json_response(common.encode_dependencies(deps), 200)
     }
     Error(_) -> wisp.unprocessable_entity()
@@ -89,10 +87,31 @@ fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
 
 pub fn get_releases_for_repository(
   repository: npm.RepositoryMeta,
-) -> Result(List(GithubReleaseWithDependencyName), error.Error) {
-  let github_releases = fetch_releases_from_github(repository)
-  let with_dep_name = with_dependency_name(repository, github_releases)
-  // todo: implement filtering of releases
+) -> Result(List(Release), error.Error) {
+  let current_version = verl.parse(repository.version)
+
+  let github_releases =
+    fetch_releases_from_github(repository)
+    |> with_dependency_name(repository)
+    |> result.map(filter_github_releases)
+    |> result.map(from_github_releases)
+
+  case current_version {
+    Ok(version) -> {
+      case github_releases {
+        Ok(releases) -> Ok(get_newer_releases(releases, version))
+        Error(_) ->
+          Error(error.releases_not_found_error(
+            dependency_name: repository.dependency_name,
+          ))
+      }
+    }
+    Error(_) ->
+      Error(error.invalid_semver_version_error(
+        dependency_name: repository.dependency_name,
+        version: repository.version,
+      ))
+  }
 }
 
 fn bool_from_result(result: Result(a, b)) -> Bool {
@@ -102,31 +121,40 @@ fn bool_from_result(result: Result(a, b)) -> Bool {
   }
 }
 
-pub fn filter_github_releases(
-  github_releases: List(GithubReleaseWithDependencyName),
-) -> List(GithubReleaseWithDependencyName) {
-  list.filter(github_releases, fn(release) {
-    let is_valid_version =
-      bool_from_result(verl.parse(release.dependency_version))
-
-    bool.negate(release.draft)
-    && bool.negate(release.prerelease)
-    && is_valid_version
-  })
+pub fn version_from_tag_name(tag_name: String) {
+  string.split(tag_name, "")
+  |> list.filter(fn(char) { bool_from_result(int.parse(char)) })
+  |> string.join(".")
+  |> verl.parse()
 }
 
 pub fn get_newer_releases(
-  releases: List(GithubRelease),
+  releases: List(Release),
   current_version: verl.Version,
-) -> List(GithubRelease) {
-  todo
+) -> List(Release) {
+  list.filter(releases, fn(release) {
+    verl.gt(release.version, current_version)
+  })
+}
+
+pub fn filter_github_releases(
+  github_releases: List(GithubReleaseWithDependencyName),
+) -> List(GithubReleaseWithDependencyName) {
+  list.filter(github_releases, fn(github_release) {
+    let is_valid_version =
+      bool_from_result(version_from_tag_name(github_release.tag_name))
+
+    bool.negate(github_release.draft)
+    && bool.negate(github_release.prerelease)
+    && is_valid_version
+  })
 }
 
 pub fn from_github_releases(
   github_releases: List(GithubReleaseWithDependencyName),
 ) -> List(Release) {
   list.map(github_releases, fn(release) {
-    let assert Ok(version) = verl.parse(release.dependency_version)
+    let assert Ok(version) = version_from_tag_name(release.tag_name)
 
     Release(
       tag_name: release.tag_name,
@@ -140,8 +168,8 @@ pub fn from_github_releases(
 }
 
 pub fn with_dependency_name(
-  repository: npm.RepositoryMeta,
   github_releases: Result(List(GithubRelease), error.Error),
+  repository: npm.RepositoryMeta,
 ) -> Result(List(GithubReleaseWithDependencyName), error.Error) {
   result.map(github_releases, fn(releases) {
     list.map(releases, fn(release) {
@@ -149,7 +177,6 @@ pub fn with_dependency_name(
         tag_name: release.tag_name,
         name: release.name,
         dependency_name: repository.dependency_name,
-        dependency_version: repository.version,
         created_at: release.created_at,
         html_url: release.html_url,
         prerelease: release.prerelease,
@@ -171,6 +198,8 @@ pub fn fetch_releases_from_github(
     |> request.set_path(path)
     |> request.set_header("User-Agent", "gleam-whats-changed-app")
     |> request.set_header("Content-Type", "application/json")
+    // todo: create a new github PAT before making repo public
+    // and pull from env
     |> request.set_header(
       "Authorization",
       "Bearer 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",
@@ -188,7 +217,7 @@ pub fn fetch_releases_from_github(
     _ -> {
       case response_.status {
         200 -> {
-          json.decode(response_.body, decode_releases())
+          json.decode(response_.body, decode_github_releases())
           |> result.map_error(error.JsonDecodeError)
         }
         404 -> {
@@ -215,7 +244,7 @@ pub fn craft_github_request_path(repository: npm.RepositoryMeta) -> String {
   <> "?per_page=100"
 }
 
-pub fn decode_releases() -> fn(Dynamic) ->
+pub fn decode_github_releases() -> fn(Dynamic) ->
   Result(List(GithubRelease), List(dynamic.DecodeError)) {
   let release_decoder =
     dynamic.decode6(

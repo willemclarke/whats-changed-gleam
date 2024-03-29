@@ -9,10 +9,10 @@ pub type InvalidVersion
 pub fn parse(version: String) -> Result(Version, InvalidVersion)
 
 @external(erlang, "verl", "eq")
-pub fn eq(version: Version) -> Result(Bool, InvalidVersion)
+pub fn eq(version1: Version, version2: Version) -> Bool
 
 @external(erlang, "verl", "gt")
-pub fn gt(version: Version) -> Result(Bool, InvalidVersion)
+pub fn gt(version1: Version, version2: Version) -> Bool
 
 @external(erlang, "verl", "gte")
-pub fn gte(version: Version) -> Result(Bool, InvalidVersion)
+pub fn gte(version1: Version, version2: Version) -> Bool
