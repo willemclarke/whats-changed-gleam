@@ -1,5 +1,9 @@
 import wisp
 
+pub type Context {
+  Context(github_token: String)
+}
+
 pub fn middleware(
   req: wisp.Request,
   handle_request: fn(wisp.Request) -> wisp.Response,

@@ -16,25 +16,16 @@ import server/verl
 import gleam/bool
 import gleam/string
 import gleam/int
+import gleam/option.{type Option, Some}
+import dot_env/env
 
-// what comes back from githubs releases api
+// dependency_name doesn't exist from github, so we optionally decode
+// and se the field later
 pub type GithubRelease {
   GithubRelease(
     tag_name: String,
+    dependency_name: Option(String),
     name: String,
-    // body: String,
-    created_at: String,
-    html_url: String,
-    prerelease: Bool,
-    draft: Bool,
-  )
-}
-
-pub type GithubReleaseWithDependencyName {
-  GithubReleaseWithDependencyName(
-    tag_name: String,
-    name: String,
-    dependency_name: String,
     created_at: String,
     html_url: String,
     prerelease: Bool,
@@ -60,18 +51,22 @@ fn bool_from_result(result: Result(a, b)) -> Bool {
   }
 }
 
-pub fn handle_request(req: Request) -> wisp.Response {
+pub fn handle_request(
+  req: Request,
+  make_context: fn() -> web.Context,
+) -> wisp.Response {
+  let context = make_context()
   use request <- web.middleware(req)
   use <- wisp.require_method(req, Post)
   use json <- wisp.require_json(req)
 
   case wisp.path_segments(request) {
-    ["dependencies"] -> dependencies(request, json)
+    ["dependencies"] -> dependencies(request, json, context)
     _ -> wisp.not_found()
   }
 }
 
-fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
+fn dependencies(_: Request, json: Dynamic, _: web.Context) -> wisp.Response {
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {
@@ -99,21 +94,12 @@ pub fn get_releases_for_repository(
 ) -> Result(List(Release), error.Error) {
   let current_version = verl.parse(repository.version)
 
-  let github_releases =
-    fetch_releases_from_github(repository)
-    |> with_dependency_name(repository)
-    |> result.map(filter_github_releases)
-    |> result.map(from_github_releases)
-
   case current_version {
     Ok(version) -> {
-      case github_releases {
-        Ok(releases) -> Ok(get_newer_releases(releases, version))
-        Error(_) ->
-          Error(error.releases_not_found_error(
-            dependency_name: repository.dependency_name,
-          ))
-      }
+      fetch_releases_from_github(repository)
+      |> set_dependency_name(repository)
+      |> result.map(fn(releases) { filter_github_releases(releases, version) })
+      |> result.map(from_github_releases)
     }
     Error(_) ->
       Error(error.invalid_semver_version_error(
@@ -131,37 +117,31 @@ pub fn version_from_tag_name(tag_name: String) {
   |> verl.parse()
 }
 
-pub fn get_newer_releases(
-  releases: List(Release),
-  current_version: verl.Version,
-) -> List(Release) {
-  list.filter(releases, fn(release) {
-    verl.gt(release.version, current_version)
-  })
-}
-
 pub fn filter_github_releases(
-  github_releases: List(GithubReleaseWithDependencyName),
-) -> List(GithubReleaseWithDependencyName) {
+  github_releases: List(GithubRelease),
+  current_version: verl.Version,
+) -> List(GithubRelease) {
   list.filter(github_releases, fn(github_release) {
-    let is_valid_version =
-      bool_from_result(version_from_tag_name(github_release.tag_name))
-
-    bool.negate(github_release.draft)
-    && bool.negate(github_release.prerelease)
-    && is_valid_version
+    case version_from_tag_name(github_release.tag_name) {
+      Ok(valid_version) -> {
+        bool.negate(github_release.draft)
+        && bool.negate(github_release.prerelease)
+        && verl.gt(valid_version, current_version)
+      }
+      Error(_) -> False
+    }
   })
 }
 
 pub fn from_github_releases(
-  github_releases: List(GithubReleaseWithDependencyName),
+  github_releases: List(GithubRelease),
 ) -> List(Release) {
   list.map(github_releases, fn(release) {
     let assert Ok(version) = version_from_tag_name(release.tag_name)
 
     Release(
       tag_name: release.tag_name,
-      dependency_name: release.dependency_name,
+      dependency_name: option.unwrap(release.dependency_name, ""),
       name: release.name,
       created_at: release.created_at,
       url: release.html_url,
@@ -170,20 +150,15 @@ pub fn from_github_releases(
   })
 }
 
-pub fn with_dependency_name(
+pub fn set_dependency_name(
   github_releases: Result(List(GithubRelease), error.Error),
   repository: npm.RepositoryMeta,
-) -> Result(List(GithubReleaseWithDependencyName), error.Error) {
+) -> Result(List(GithubRelease), error.Error) {
   result.map(github_releases, fn(releases) {
     list.map(releases, fn(release) {
-      GithubReleaseWithDependencyName(
-        tag_name: release.tag_name,
-        name: release.name,
-        dependency_name: repository.dependency_name,
-        created_at: release.created_at,
-        html_url: release.html_url,
-        prerelease: release.prerelease,
-        draft: release.draft,
+      GithubRelease(
+        ..release,
+        dependency_name: Some(repository.dependency_name),
       )
     })
   })
@@ -193,6 +168,7 @@ pub fn fetch_releases_from_github(
   repository: npm.RepositoryMeta,
 ) -> Result(List(GithubRelease), error.Error) {
   let path = craft_github_request_path(repository)
+  let assert Ok(token) = env.get("GITHUB_TOKEN")
 
   let assert Ok(response_) =
     request.new()
@@ -201,15 +177,9 @@ pub fn fetch_releases_from_github(
     |> request.set_path(path)
     |> request.set_header("User-Agent", "gleam-whats-changed-app")
     |> request.set_header("Content-Type", "application/json")
-    // todo: create a new github PAT before making repo public
-    // and pull from env
-    |> request.set_header(
-      "Authorization",
-      "Bearer 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",
-    )
+    |> request.set_header("Authorization", "Bearer " <> token)
     |> httpc.send()
 
-  // lift the type of response.body from String -> List(GithubRelease)
   let decoded =
     response.try_map(response_, json.decode(_, decode_github_releases()))
 
@@ -261,9 +231,10 @@ pub fn craft_github_request_path(repository: npm.RepositoryMeta) -> String {
 pub fn decode_github_releases() -> fn(Dynamic) ->
   Result(List(GithubRelease), List(dynamic.DecodeError)) {
   let release_decoder =
-    dynamic.decode6(
+    dynamic.decode7(
       GithubRelease,
       dynamic.field("tag_name", dynamic.string),
+      dynamic.optional_field("dependency_name", dynamic.string),
       dynamic.field("name", dynamic.string),
       dynamic.field("created_at", dynamic.string),
       dynamic.field("html_url", dynamic.string),
