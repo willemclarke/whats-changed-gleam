@@ -45,12 +45,19 @@ pub type GithubReleaseWithDependencyName {
 pub type Release {
   Release(
     tag_name: String,
+    dependency_name: String,
     name: String,
-    version: verl.Version,
     url: String,
     created_at: String,
-    dependency_name: String,
+    version: verl.Version,
   )
+}
+
+fn bool_from_result(result: Result(a, b)) -> Bool {
+  case result {
+    Ok(_) -> True
+    Error(_) -> False
+  }
 }
 
 pub fn handle_request(req: Request) -> wisp.Response {
@@ -73,11 +80,13 @@ fn dependencies(_: Request, json: Dynamic) -> wisp.Response {
         list.map(deps, npm.get_repository_meta_from_npm)
         |> result.values()
 
-      let _ =
+      let releases =
         list.map(repositories, get_releases_for_repository)
         |> result.values()
         |> list.flatten()
         |> io.debug()
+
+      io.debug(list.length(of: releases))
 
       wisp.json_response(common.encode_dependencies(deps), 200)
     }
@@ -114,13 +123,7 @@ pub fn get_releases_for_repository(
   }
 }
 
-fn bool_from_result(result: Result(a, b)) -> Bool {
-  case result {
-    Ok(_) -> True
-    Error(_) -> False
-  }
-}
-
+// e.g. v1.4.3 -> 1.4.3, plugin-legacy@5.3.1 -> 5.3.1
 pub fn version_from_tag_name(tag_name: String) {
   string.split(tag_name, "")
   |> list.filter(fn(char) { bool_from_result(int.parse(char)) })
@@ -158,11 +161,11 @@ pub fn from_github_releases(
 
     Release(
       tag_name: release.tag_name,
+      dependency_name: release.dependency_name,
       name: release.name,
-      version: version,
       created_at: release.created_at,
       url: release.html_url,
-      dependency_name: release.dependency_name,
+      version: version,
     )
   })
 }
@@ -206,32 +209,43 @@ pub fn fetch_releases_from_github(
     )
     |> httpc.send()
 
-  let assert Ok(rate_limit_remaining) =
-    response.get_header(response_, "x-ratelimit-remaining")
+  // lift the type of response.body from String -> List(GithubRelease)
+  let decoded =
+    response.try_map(response_, json.decode(_, decode_github_releases()))
 
-  case rate_limit_remaining {
-    "0" ->
-      Error(error.http_rate_limit_exceeded(
-        dependency_name: repository.dependency_name,
-      ))
-    _ -> {
-      case response_.status {
-        200 -> {
-          json.decode(response_.body, decode_github_releases())
-          |> result.map_error(error.JsonDecodeError)
-        }
-        404 -> {
-          Error(error.http_not_found_error(
+  // TODO: understand how to paginate via link header
+  // let assert Ok(link_header) =
+  //   response.get_header(response_, "link")
+  //   |> io.debug()
+
+  case decoded {
+    Ok(resp) -> {
+      let assert Ok(rate_limit_remaining) =
+        response.get_header(resp, "x-ratelimit-remaining")
+
+      case rate_limit_remaining {
+        "0" ->
+          Error(error.http_rate_limit_exceeded(
             dependency_name: repository.dependency_name,
           ))
+        _ -> {
+          case resp.status {
+            200 -> Ok(resp.body)
+            404 ->
+              Error(error.http_not_found_error(
+                dependency_name: repository.dependency_name,
+              ))
+
+            code ->
+              Error(error.http_unexpected_error(
+                status_code: code,
+                dependency_name: repository.dependency_name,
+              ))
+          }
         }
-        code ->
-          Error(error.http_unexpected_error(
-            status_code: code,
-            dependency_name: repository.dependency_name,
-          ))
       }
     }
+    Error(err) -> Error(error.JsonDecodeError(err))
   }
 }
 

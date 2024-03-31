@@ -4,6 +4,7 @@ import gleam/dynamic.{type Dynamic}
 import gleam/http.{Get}
 import gleam/httpc
 import gleam/http/request
+import gleam/http/response
 import gleam/json
 import gleam/result
 import gleam/string
@@ -70,19 +71,23 @@ pub fn fetch_package_details(
     |> request.set_header("Content-Type", "application/json")
     |> httpc.send()
 
-  case response_.status {
-    200 -> {
-      json.decode(response_.body, decode_npm_package())
-      |> result.map_error(error.JsonDecodeError)
+  let decoded =
+    response.try_map(response_, json.decode(_, decode_npm_package()))
+
+  case decoded {
+    Ok(resp) -> {
+      case resp.status {
+        200 -> Ok(resp.body)
+        404 ->
+          Error(error.http_not_found_error(dependency_name: dependency.name))
+        code ->
+          Error(error.http_unexpected_error(
+            status_code: code,
+            dependency_name: dependency.name,
+          ))
+      }
     }
-    404 -> {
-      Error(error.http_not_found_error(dependency_name: dependency.name))
-    }
-    code ->
-      Error(error.http_unexpected_error(
-        status_code: code,
-        dependency_name: dependency.name,
-      ))
+    Error(err) -> Error(error.JsonDecodeError(err))
   }
 }
 
