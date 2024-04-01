@@ -24,12 +24,12 @@ import dot_env/env
 pub type GithubRelease {
   GithubRelease(
     tag_name: String,
-    dependency_name: Option(String),
     name: String,
     created_at: String,
     html_url: String,
     prerelease: Bool,
     draft: Bool,
+    dependency_name: Option(String),
   )
 }
 
@@ -75,13 +75,7 @@ fn dependencies(_: Request, json: Dynamic, _: web.Context) -> wisp.Response {
         list.map(deps, npm.get_repository_meta_from_npm)
         |> result.values()
 
-      let releases =
-        list.map(repositories, get_releases_for_repository)
-        |> result.values()
-        |> list.flatten()
-        |> io.debug()
-
-      io.debug(list.length(of: releases))
+      let _ = list.map(repositories, get_releases_for_repository)
 
       wisp.json_response(common.encode_dependencies(deps), 200)
     }
@@ -96,7 +90,16 @@ pub fn get_releases_for_repository(
 
   case current_version {
     Ok(version) -> {
-      fetch_releases_from_github(repository)
+      paginate_github_releases(
+        repository: repository,
+        stop_predicate: fn(release) {
+          version_from_tag_name(release.tag_name)
+          |> result.map(fn(release_version) {
+            verl.lt(release_version, version)
+          })
+          |> result.unwrap(False)
+        },
+      )
       |> set_dependency_name(repository)
       |> result.map(fn(releases) { filter_github_releases(releases, version) })
       |> result.map(from_github_releases)
@@ -110,6 +113,7 @@ pub fn get_releases_for_repository(
 }
 
 // e.g. v1.4.3 -> 1.4.3, plugin-legacy@5.3.1 -> 5.3.1
+// then parsed into semvar
 pub fn version_from_tag_name(tag_name: String) {
   string.split(tag_name, "")
   |> list.filter(fn(char) { bool_from_result(int.parse(char)) })
@@ -164,29 +168,115 @@ pub fn set_dependency_name(
   })
 }
 
-pub fn fetch_releases_from_github(
-  repository: npm.RepositoryMeta,
+pub fn paginate_github_releases(
+  repository repo: npm.RepositoryMeta,
+  stop_predicate stop_pred: fn(GithubRelease) -> Bool,
 ) -> Result(List(GithubRelease), error.Error) {
-  let path = craft_github_request_path(repository)
+  let url = craft_github_request_url(repo)
+  let initial_response = fetch_releases_from_github(url, repo)
+
+  case initial_response {
+    Ok(response) -> {
+      let should_stop = list.any(response.body, stop_pred)
+
+      case should_stop {
+        True -> Ok(response.body)
+        False -> {
+          let next_page_url = get_next_page_url(response)
+          paginate_helper(repo, response.body, stop_pred, next_page_url)
+        }
+      }
+    }
+    Error(err) -> Error(err)
+  }
+}
+
+fn paginate_helper(
+  repository: npm.RepositoryMeta,
+  releases: List(GithubRelease),
+  stop_predicate: fn(GithubRelease) -> Bool,
+  next_page_url: Result(String, Nil),
+) -> Result(List(GithubRelease), error.Error) {
+  let should_stop = list.any(releases, stop_predicate)
+
+  case should_stop {
+    True -> {
+      io.debug(
+        #("Stopped paginating older version encountered: dependency, version", [
+          repository.dependency_name,
+          repository.version,
+        ]),
+      )
+      Ok(releases)
+    }
+    False -> {
+      case next_page_url {
+        Error(_) -> Ok(releases)
+        Ok(url) -> {
+          let next_response = fetch_releases_from_github(url, repository)
+
+          case next_response {
+            Ok(res) -> {
+              let next_page = get_next_page_url(res)
+              let combined = list.append(releases, res.body)
+
+              paginate_helper(repository, combined, stop_predicate, next_page)
+            }
+            Error(err) -> Error(err)
+          }
+        }
+      }
+    }
+  }
+}
+
+// "<https://api.github.com/repositories/20929025/releases?per_page=100&page=2>; rel=\"next\", <https://api.github.com/repositories/20929025/releases?per_page=100&page=2>; rel=\"last\""
+// pull the url out from the rel="next" block
+pub fn get_next_page_url(res: response.Response(a)) -> Result(String, Nil) {
+  let link_header = response.get_header(res, "link")
+
+  case link_header {
+    Error(err) -> Error(err)
+    Ok(header) -> {
+      let split_header = string.split(header, ",")
+      let next_segment =
+        list.find(split_header, fn(str) { string.contains(str, "rel=\"next\"") })
+
+      let raw_page_url =
+        result.map(next_segment, fn(url) {
+          string.split(url, ";")
+          |> list.at(0)
+          |> result.unwrap("")
+          |> string.replace("<", "")
+          |> string.replace(">", "")
+          |> string.trim()
+        })
+
+      result.try(raw_page_url, fn(url) {
+        case url {
+          "" -> Error(Nil)
+          str -> Ok(str)
+        }
+      })
+    }
+  }
+}
+
+pub fn fetch_releases_from_github(
+  url: String,
+  repository: npm.RepositoryMeta,
+) -> Result(response.Response(List(GithubRelease)), error.Error) {
   let assert Ok(token) = env.get("GITHUB_TOKEN")
 
+  let assert Ok(request_) = request.to(url)
   let assert Ok(response_) =
-    request.new()
-    |> request.set_method(Get)
-    |> request.set_host("api.github.com")
-    |> request.set_path(path)
-    |> request.set_header("User-Agent", "gleam-whats-changed-app")
+    request.set_header(request_, "User-Agent", "gleam-whats-changed-app")
     |> request.set_header("Content-Type", "application/json")
     |> request.set_header("Authorization", "Bearer " <> token)
     |> httpc.send()
 
   let decoded =
     response.try_map(response_, json.decode(_, decode_github_releases()))
-
-  // TODO: understand how to paginate via link header
-  // let assert Ok(link_header) =
-  //   response.get_header(response_, "link")
-  //   |> io.debug()
 
   case decoded {
     Ok(resp) -> {
@@ -200,7 +290,7 @@ pub fn fetch_releases_from_github(
           ))
         _ -> {
           case resp.status {
-            200 -> Ok(resp.body)
+            200 -> Ok(resp)
             404 ->
               Error(error.http_not_found_error(
                 dependency_name: repository.dependency_name,
@@ -219,13 +309,14 @@ pub fn fetch_releases_from_github(
   }
 }
 
-pub fn craft_github_request_path(repository: npm.RepositoryMeta) -> String {
-  "/repos/"
+pub fn craft_github_request_url(repository: npm.RepositoryMeta) -> String {
+  "https://api.github.com/repos/"
   <> repository.github_owner
   <> "/"
   <> repository.github_name
   <> "/releases"
   <> "?per_page=100"
+  <> "&page=1"
 }
 
 pub fn decode_github_releases() -> fn(Dynamic) ->
@@ -234,12 +325,12 @@ pub fn decode_github_releases() -> fn(Dynamic) ->
     dynamic.decode7(
       GithubRelease,
       dynamic.field("tag_name", dynamic.string),
-      dynamic.optional_field("dependency_name", dynamic.string),
       dynamic.field("name", dynamic.string),
       dynamic.field("created_at", dynamic.string),
       dynamic.field("html_url", dynamic.string),
       dynamic.field("prerelease", dynamic.bool),
       dynamic.field("draft", dynamic.bool),
+      dynamic.optional_field("dependency_name", dynamic.string),
     )
 
   dynamic.list(release_decoder)
