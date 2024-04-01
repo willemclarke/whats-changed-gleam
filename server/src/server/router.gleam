@@ -238,16 +238,25 @@ pub fn get_next_page_url(res: response.Response(a)) -> Result(String, Nil) {
   case link_header {
     Error(err) -> Error(err)
     Ok(header) -> {
-      let split = string.split(header, ",")
+      let split_header = string.split(header, ",")
+      let next_segment =
+        list.find(split_header, fn(str) { string.contains(str, "rel=\"next\"") })
 
-      list.find(split, fn(str) { string.contains(str, "rel=\"next\"") })
-      |> result.map(fn(url) {
-        string.split(url, ";")
-        |> list.at(0)
-        |> result.unwrap("")
-        |> string.replace("<", "")
-        |> string.replace(">", "")
-        |> string.trim()
+      let raw_page_url =
+        result.map(next_segment, fn(url) {
+          string.split(url, ";")
+          |> list.at(0)
+          |> result.unwrap("")
+          |> string.replace("<", "")
+          |> string.replace(">", "")
+          |> string.trim()
+        })
+
+      result.try(raw_page_url, fn(url) {
+        case url {
+          "" -> Error(Nil)
+          str -> Ok(str)
+        }
       })
     }
   }
