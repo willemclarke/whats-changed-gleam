@@ -14,5 +14,5 @@ pub fn eq(version1: Version, version2: Version) -> Bool
 @external(erlang, "verl", "gt")
 pub fn gt(version1: Version, version2: Version) -> Bool
 
-@external(erlang, "verl", "gte")
-pub fn gte(version1: Version, version2: Version) -> Bool
+@external(erlang, "verl", "lt")
+pub fn lt(version1: Version, version2: Version) -> Bool
