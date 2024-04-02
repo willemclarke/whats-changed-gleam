@@ -53,7 +53,7 @@ pub fn extract_repository_meta(
 
   RepositoryMeta(
     github_owner,
-    github_name,
+    github_name: string.lowercase(github_name),
     dependency_name: dependency.name,
     version: dependency.version,
   )
