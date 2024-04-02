@@ -180,7 +180,16 @@ pub fn paginate_github_releases(
       let should_stop = list.any(response.body, stop_pred)
 
       case should_stop {
-        True -> Ok(response.body)
+        True -> {
+          io.debug(
+            #(
+              "Stopped paginating older version encountered: dependency, version",
+              [repo.dependency_name, repo.version],
+            ),
+          )
+
+          Ok(response.body)
+        }
         False -> {
           let next_page_url = get_next_page_url(response)
           paginate_helper(repo, response.body, stop_pred, next_page_url)
@@ -231,35 +240,32 @@ fn paginate_helper(
 }
 
 // "<https://api.github.com/repositories/20929025/releases?per_page=100&page=2>; rel=\"next\", <https://api.github.com/repositories/20929025/releases?per_page=100&page=2>; rel=\"last\""
-// pull the url out from the rel="next" block
 pub fn get_next_page_url(res: response.Response(a)) -> Result(String, Nil) {
   let link_header = response.get_header(res, "link")
+  result.try(link_header, url_from_link_header)
+}
 
-  case link_header {
-    Error(err) -> Error(err)
-    Ok(header) -> {
-      let split_header = string.split(header, ",")
-      let next_segment =
-        list.find(split_header, fn(str) { string.contains(str, "rel=\"next\"") })
+pub fn url_from_link_header(link_header: String) -> Result(String, Nil) {
+  let split_header = string.split(link_header, ",")
+  let next_segment =
+    list.find(split_header, fn(str) { string.contains(str, "rel=\"next\"") })
 
-      let raw_page_url =
-        result.map(next_segment, fn(url) {
-          string.split(url, ";")
-          |> list.at(0)
-          |> result.unwrap("")
-          |> string.replace("<", "")
-          |> string.replace(">", "")
-          |> string.trim()
-        })
+  let raw_page_url =
+    result.map(next_segment, fn(url) {
+      string.split(url, ";")
+      |> list.at(0)
+      |> result.unwrap("")
+      |> string.replace("<", "")
+      |> string.replace(">", "")
+      |> string.trim()
+    })
 
-      result.try(raw_page_url, fn(url) {
-        case url {
-          "" -> Error(Nil)
-          str -> Ok(str)
-        }
-      })
+  result.try(raw_page_url, fn(url) {
+    case url {
+      "" -> Error(Nil)
+      str -> Ok(str)
     }
-  }
+  })
 }
 
 pub fn fetch_releases_from_github(
