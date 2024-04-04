@@ -24,7 +24,7 @@ import dot_env/env
 pub type GithubRelease {
   GithubRelease(
     tag_name: String,
-    name: String,
+    name: Option(String),
     created_at: String,
     html_url: String,
     prerelease: Bool,
@@ -37,7 +37,7 @@ pub type Release {
   Release(
     tag_name: String,
     dependency_name: String,
-    name: String,
+    name: Option(String),
     url: String,
     created_at: String,
     version: verl.Version,
@@ -331,7 +331,7 @@ pub fn decode_github_releases() -> fn(Dynamic) ->
     dynamic.decode7(
       GithubRelease,
       dynamic.field("tag_name", dynamic.string),
-      dynamic.field("name", dynamic.string),
+      dynamic.field("name", dynamic.optional(dynamic.string)),
       dynamic.field("created_at", dynamic.string),
       dynamic.field("html_url", dynamic.string),
       dynamic.field("prerelease", dynamic.bool),
