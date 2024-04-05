@@ -3,3 +3,6 @@
 build
 erl_crash.dump
 .env
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal

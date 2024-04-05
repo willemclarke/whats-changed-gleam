@@ -30,7 +30,7 @@ pub type RepositoryMeta {
 }
 
 // main fn of this module
-pub fn get_repository_meta_from_npm(
+pub fn get_repository_meta(
   dependency: common.Dependency,
 ) -> Result(RepositoryMeta, error.Error) {
   let package_details = fetch_package_details(dependency)

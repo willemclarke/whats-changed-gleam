@@ -1,7 +1,8 @@
 import wisp
+import server/database
 
 pub type Context {
-  Context(github_token: String)
+  Context(github_token: String, db: database.Connection)
 }
 
 pub fn middleware(

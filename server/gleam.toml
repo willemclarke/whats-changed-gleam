@@ -23,6 +23,8 @@ gleam_httpc = "~> 2.2"
 snag = "~> 0.3"
 verl = "~> 1.1"
 dot_env = "~> 0.3"
+sqlight = "~> 0.9"
+gluid = "~> 1.0"
 
 
 [dev-dependencies]

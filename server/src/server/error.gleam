@@ -1,10 +1,12 @@
 import gleam/json
+import sqlight
 
 pub type Error {
   Http(HttpClientError)
   JsonDecodeError(json.DecodeError)
   Semvar(SemvarParseError)
   Releases(ReleasesError)
+  DatabaseError(sqlight.Error)
 }
 
 pub type SemvarParseError {
