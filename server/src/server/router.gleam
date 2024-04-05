@@ -5,8 +5,10 @@ import gleam/list
 import gleam/result
 import server/web
 import server/github
+import server/database
 import server/npm
 import common
+import gleam/io
 
 pub fn handle_request(
   req: Request,
@@ -23,7 +25,11 @@ pub fn handle_request(
   }
 }
 
-fn dependencies(_: Request, json: Dynamic, _: web.Context) -> wisp.Response {
+fn dependencies(
+  _: Request,
+  json: Dynamic,
+  context: web.Context,
+) -> wisp.Response {
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {
@@ -32,7 +38,14 @@ fn dependencies(_: Request, json: Dynamic, _: web.Context) -> wisp.Response {
         list.map(deps, npm.get_repository_meta)
         |> result.values()
 
-      let _ = list.map(repositories, github.get_releases_for_repository)
+      let releases =
+        list.map(repositories, github.get_releases_for_repository)
+        |> result.values
+        |> list.flatten
+
+      // list.try_map(releases, fn(release) {
+      //   database.insert_release(context.db, release)
+      // })
 
       wisp.json_response(common.encode_dependencies(deps), 200)
     }

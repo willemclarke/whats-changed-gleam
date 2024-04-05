@@ -14,6 +14,7 @@ pub fn main() {
   let secret_key_base = wisp.random_string(64)
   let database_name = database_name()
 
+  // Initialisation that is run per-request
   let make_context = fn() -> web.Context {
     let assert Ok(token) = env.get("GITHUB_TOKEN")
     let db = database.connect(database_name)
