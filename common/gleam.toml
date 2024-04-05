@@ -14,4 +14,3 @@ gleam_stdlib = "~> 0.32"
 gleam_json = "~> 1.0"
 
 [dev-dependencies]
-gleeunit = "~> 1.0"
