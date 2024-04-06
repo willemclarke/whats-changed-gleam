@@ -41,7 +41,7 @@ pub fn get_repository_meta(
   }
 }
 
-pub fn extract_repository_meta(
+fn extract_repository_meta(
   package: NpmPackage,
   dependency: common.Dependency,
 ) -> RepositoryMeta {
@@ -59,7 +59,7 @@ pub fn extract_repository_meta(
   )
 }
 
-pub fn fetch_package_details(
+fn fetch_package_details(
   dependency: common.Dependency,
 ) -> Result(NpmPackage, error.Error) {
   let assert Ok(response_) =

@@ -8,7 +8,6 @@ import server/github
 import server/database
 import server/npm
 import common
-import gleam/io
 import gleam/set
 
 pub fn handle_request(
@@ -21,12 +20,12 @@ pub fn handle_request(
   use json <- wisp.require_json(req)
 
   case wisp.path_segments(request) {
-    ["dependencies"] -> dependencies(request, json, context)
+    ["releases"] -> get_releases_handler(request, json, context)
     _ -> wisp.not_found()
   }
 }
 
-fn dependencies(
+fn get_releases_handler(
   _: Request,
   json: Dynamic,
   context: web.Context,
@@ -34,50 +33,49 @@ fn dependencies(
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {
+    Ok(dependencies) -> get_releases(dependencies, context.db)
     Error(_) -> wisp.unprocessable_entity()
-    Ok(deps) -> {
-      io.debug(#("deps", deps))
-      let releases_from_cache = get_releases_from_cache(deps, context.db)
-      let cache_keys =
-        releases_from_cache
-        |> list.map(fn(release) { release.dependency_name })
-        |> set.from_list
+  }
+}
 
-      let dependencies_not_in_cache =
-        list.filter(deps, fn(dependency) {
-          !set.contains(cache_keys, dependency.name)
-        })
+fn get_releases(dependencies: List(common.Dependency), db: database.Connection) {
+  let releases_from_cache = get_releases_from_cache(dependencies, db)
+  let cache_keys =
+    list.map(releases_from_cache, fn(release) { release.dependency_name })
+    |> set.from_list
 
-      io.debug(#("deps_not_in_cache", dependencies_not_in_cache))
+  let dependencies_not_in_cache =
+    list.filter(dependencies, fn(dependency) {
+      !set.contains(cache_keys, dependency.name)
+    })
 
-      case dependencies_not_in_cache {
-        [] -> {
-          io.print("all dependencies were in cache")
-          wisp.json_response(github.encode_releases(releases_from_cache), 200)
-        }
-        _ -> {
-          io.print("have to fetch from npm/github ")
-          let repositories =
-            list.map(dependencies_not_in_cache, npm.get_repository_meta)
-            |> result.values()
+  case dependencies_not_in_cache {
+    [] -> {
+      wisp.json_response(github.encode_releases(releases_from_cache), 200)
+    }
 
-          let releases_from_github =
-            list.map(repositories, github.get_releases_for_repository)
-            |> result.values
-            |> list.flatten
+    rest_dependencies -> {
+      let releases_from_github = get_releases_from_github(rest_dependencies)
+      database.insert_releases(db, releases_from_github)
 
-          // update database with any releases we had to fetch from github
-          list.each(releases_from_github, fn(release) {
-            database.insert_release(context.db, release)
-          })
-
-          // join both cache releases + those we just fetched back to client
-          let combined = list.append(releases_from_cache, releases_from_github)
-          wisp.json_response(github.encode_releases(combined), 200)
-        }
-      }
+      let combined_releases =
+        list.append(releases_from_cache, releases_from_github)
+      wisp.json_response(github.encode_releases(combined_releases), 200)
     }
   }
+}
+
+// TODO: handle unwrapping the Error values and mapping them into a type
+fn get_releases_from_github(
+  dependencies: List(common.Dependency),
+) -> List(github.Release) {
+  let repositories =
+    list.map(dependencies, npm.get_repository_meta)
+    |> result.values()
+
+  list.map(repositories, github.get_releases_for_repository)
+  |> result.values
+  |> list.flatten
 }
 
 fn get_releases_from_cache(

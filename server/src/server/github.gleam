@@ -40,6 +40,21 @@ pub type Release {
   )
 }
 
+// Ideal type to send back to client
+// pub opaque type Package {
+//   HasReleases(List(Release))
+//   NotFound(dependency_name: String)
+//   NoReleases(dependency_name: String)
+// }
+
+// pub fn has_releases(releases: List(Release)) -> Package {
+//   HasReleases(releases)
+// }
+
+// pub fn not_found(dependency_name: String) -> Package {
+//   NotFound(dependency_name)
+// }
+
 // main fn of module: given a npm package, fetch ALL releases for it
 // from githubs api
 pub fn get_releases_for_repository(

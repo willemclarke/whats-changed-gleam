@@ -1,4 +1,3 @@
-import gleam/io
 import gleam/dynamic
 import gleam/json
 

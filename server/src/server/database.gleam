@@ -6,6 +6,7 @@ import server/github
 import gleam/option.{type Option}
 import common
 import gluid
+import gleam/list
 
 pub opaque type Connection {
   Connection(inner: sqlight.Connection)
@@ -66,6 +67,10 @@ pub fn get_releases(
     expecting: decode_db_release,
   )
   |> result.map_error(error.DatabaseError)
+}
+
+pub fn insert_releases(db: Connection, releases: List(github.Release)) -> Nil {
+  list.each(releases, fn(release) { insert_release(db, release) })
 }
 
 pub fn insert_release(
