@@ -84,13 +84,24 @@ pub fn insert_release(
     sqlight.nullable(sqlight.text, release.name),
     sqlight.text(release.tag_name),
     sqlight.text(release.dependency_name),
-    sqlight.text(release.display_version),
+    sqlight.text(release.version),
     sqlight.text(release.url),
   ]
 
   sqlight.query(query, on: db.inner, with: parameters, expecting: Ok)
   |> result.replace(Nil)
   |> result.map_error(error.DatabaseError)
+}
+
+pub fn from_db_release(db_release: DbRelease) -> github.Release {
+  github.Release(
+    tag_name: db_release.tag_name,
+    dependency_name: db_release.dependency_name,
+    name: db_release.name,
+    url: db_release.url,
+    version: db_release.version,
+    created_at: db_release.created_at,
+  )
 }
 
 fn decode_db_release(

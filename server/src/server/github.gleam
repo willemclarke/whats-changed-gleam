@@ -9,11 +9,11 @@ import gleam/result
 import server/error
 import server/npm
 import server/verl
-import gleam/bool
 import gleam/string
 import gleam/int
 import gleam/option.{type Option, Some}
 import dot_env/env
+import gleam/string_builder.{type StringBuilder}
 
 // what we get back from githubs api
 pub type GithubRelease {
@@ -36,8 +36,7 @@ pub type Release {
     name: Option(String),
     url: String,
     created_at: String,
-    version: verl.Version,
-    display_version: String,
+    version: String,
   )
 }
 
@@ -207,8 +206,8 @@ fn filter_github_releases(
 
     case version {
       Ok(valid_version) -> {
-        bool.negate(github_release.draft)
-        && bool.negate(github_release.prerelease)
+        !github_release.draft
+        && !github_release.prerelease
         && verl.gt(valid_version, current_version)
       }
       Error(_) -> False
@@ -219,7 +218,6 @@ fn filter_github_releases(
 fn from_github_releases(github_releases: List(GithubRelease)) -> List(Release) {
   list.map(github_releases, fn(release) {
     let display_version = version_from_tag_name(release.tag_name)
-    let assert Ok(version) = verl.parse(display_version)
 
     Release(
       tag_name: release.tag_name,
@@ -227,8 +225,7 @@ fn from_github_releases(github_releases: List(GithubRelease)) -> List(Release) {
       name: release.name,
       created_at: release.created_at,
       url: release.html_url,
-      version: version,
-      display_version: display_version,
+      version: display_version,
     )
   })
 }
@@ -300,6 +297,20 @@ pub fn url_from_link_header(link_header: String) -> Result(String, Nil) {
       str -> Ok(str)
     }
   })
+}
+
+pub fn encode_releases(releases: List(Release)) -> StringBuilder {
+  json.array(releases, fn(release) {
+    json.object([
+      #("tag_name", json.string(release.tag_name)),
+      #("dependency_name", json.string(release.dependency_name)),
+      #("name", json.nullable(release.name, json.string)),
+      #("url", json.string(release.url)),
+      #("version", json.string(release.version)),
+      #("created_at", json.string(release.created_at)),
+    ])
+  })
+  |> json.to_string_builder
 }
 
 fn decode_github_releases() -> fn(Dynamic) ->
