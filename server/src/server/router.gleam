@@ -9,6 +9,7 @@ import server/database
 import server/npm
 import common
 import gleam/set
+import gleam/io
 
 pub fn handle_request(
   req: Request,
@@ -60,6 +61,7 @@ fn get_releases(dependencies: List(common.Dependency), db: database.Connection) 
 
       let combined_releases =
         list.append(releases_from_cache, releases_from_github)
+
       wisp.json_response(github.encode_releases(combined_releases), 200)
     }
   }
