@@ -112,10 +112,10 @@ fn get_external_processed_dependencies(
 
   let processed_dependencies =
     separated_packages.found_packages
-    |> list.map(fn(repository) {
-      repository
-      |> github.get_releases_for_repository()
-      |> processed_dependency_from_releases(repository.dependency_name)
+    |> list.map(fn(package) {
+      package
+      |> github.get_releases_for_npm_package()
+      |> processed_dependency_from_releases(package.dependency_name)
     })
 
   let to_not_found =

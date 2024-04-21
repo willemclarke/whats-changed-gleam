@@ -31,46 +31,43 @@ pub type GithubRelease {
 
 // main fn of module: given a npm package, fetch ALL releases for it
 // from githubs api
-pub fn get_releases_for_repository(
-  repository: npm.PackageMeta,
+pub fn get_releases_for_npm_package(
+  package: npm.PackageMeta,
 ) -> Result(List(common.Release), error.Error) {
-  let current_version = verl.parse(repository.version)
+  let current_version = verl.parse(package.version)
 
   case current_version {
     Ok(version) -> {
       let releases =
-        paginate_github_releases(
-          repository: repository,
-          stop_predicate: fn(release) {
-            version_from_tag_name(release.tag_name)
-            |> verl.parse
-            |> result.map(fn(release_version) {
-              verl.lt(release_version, version)
-            })
-            |> result.unwrap(False)
-          },
-        )
+        paginate_github_releases(package: package, stop_predicate: fn(release) {
+          version_from_tag_name(release.tag_name)
+          |> verl.parse
+          |> result.map(fn(release_version) {
+            verl.lt(release_version, version)
+          })
+          |> result.unwrap(False)
+        })
 
       releases
-      |> set_dependency_name(repository)
+      |> set_dependency_name(package)
       |> result.map(fn(releases) { filter_github_releases(releases, version) })
       |> result.map(from_github_releases)
     }
 
     Error(_) ->
       Error(error.invalid_semver_version_error(
-        dependency_name: repository.dependency_name,
-        version: repository.version,
+        dependency_name: package.dependency_name,
+        version: package.version,
       ))
   }
 }
 
 fn paginate_github_releases(
-  repository repo: npm.PackageMeta,
+  package pkg: npm.PackageMeta,
   stop_predicate stop_pred: fn(GithubRelease) -> Bool,
 ) -> Result(List(GithubRelease), error.Error) {
-  let url = craft_github_request_url(repo)
-  let initial_response = fetch_releases_from_github(url, repo)
+  let url = craft_github_request_url(pkg)
+  let initial_response = fetch_releases_from_github(url, pkg)
 
   case initial_response {
     Ok(response) -> {
@@ -81,7 +78,7 @@ fn paginate_github_releases(
           io.debug(
             #(
               "Stopped paginating older version encountered: dependency, version",
-              [repo.dependency_name, repo.version],
+              [pkg.dependency_name, pkg.version],
             ),
           )
 
@@ -89,7 +86,7 @@ fn paginate_github_releases(
         }
         False -> {
           let next_page_url = get_next_page_url(response)
-          paginate_helper(repo, response.body, stop_pred, next_page_url)
+          paginate_helper(pkg, response.body, stop_pred, next_page_url)
         }
       }
     }
