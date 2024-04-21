@@ -18,6 +18,12 @@ pub fn version_from_tag_name_test() {
 
   github.version_from_tag_name("v9.0.0-rc.0")
   |> should.equal("9.0.0")
+
+  github.version_from_tag_name("v1.0.0")
+  |> should.equal("1.0.0")
+
+  github.version_from_tag_name("v1.11.3")
+  |> should.equal("1.11.3")
 }
 
 pub fn link_header_url_parsing_test() {
