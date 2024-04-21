@@ -8,6 +8,7 @@ import gleam/http/response
 import gleam/json
 import gleam/string
 import gleam/list
+import gleam/result
 
 // what we get back from npm api 
 pub type NpmPackage {
@@ -20,8 +21,8 @@ pub type NpmRepository {
 
 // what we construct from the NpmPackage response.
 // this information will be used to lookup the github releases api
-pub type RepositoryMeta {
-  RepositoryMeta(
+pub type PackageMeta {
+  PackageMeta(
     github_owner: String,
     github_name: String,
     version: String,
@@ -30,28 +31,24 @@ pub type RepositoryMeta {
 }
 
 // main fn of this module
-pub fn get_repository_meta(
-  dependency: common.Dependency,
-) -> Result(RepositoryMeta, error.Error) {
-  let package_details = fetch_package_details(dependency)
-
-  case package_details {
-    Ok(package) -> Ok(extract_repository_meta(package, dependency))
-    Error(err) -> Error(err)
-  }
+pub fn get_package_meta(
+  dependency: common.ClientDependency,
+) -> Result(PackageMeta, error.Error) {
+  fetch_package_details(dependency)
+  |> result.map(fn(package) { extract_repository_meta(package, dependency) })
 }
 
 fn extract_repository_meta(
   package: NpmPackage,
-  dependency: common.Dependency,
-) -> RepositoryMeta {
+  dependency: common.ClientDependency,
+) -> PackageMeta {
   let split = string.split(package.repository.url, "/")
 
   let assert Ok(github_owner) = list.at(split, 3)
   let assert Ok(repository_name) = list.at(split, 4)
   let github_name = string.replace(repository_name, ".git", "")
 
-  RepositoryMeta(
+  PackageMeta(
     github_owner,
     github_name: string.lowercase(github_name),
     dependency_name: dependency.name,
@@ -60,7 +57,7 @@ fn extract_repository_meta(
 }
 
 fn fetch_package_details(
-  dependency: common.Dependency,
+  dependency: common.ClientDependency,
 ) -> Result(NpmPackage, error.Error) {
   let assert Ok(response_) =
     request.new()
@@ -70,23 +67,18 @@ fn fetch_package_details(
     |> request.set_header("Content-Type", "application/json")
     |> httpc.send()
 
-  let decoded =
-    response.try_map(response_, json.decode(_, decode_npm_package()))
-
-  case decoded {
-    Ok(resp) -> {
-      case resp.status {
-        200 -> Ok(resp.body)
-        404 ->
-          Error(error.http_not_found_error(dependency_name: dependency.name))
-        code ->
-          Error(error.http_unexpected_error(
-            status_code: code,
-            dependency_name: dependency.name,
-          ))
-      }
+  case response_.status {
+    200 -> {
+      response.try_map(response_, json.decode(_, decode_npm_package()))
+      |> result.map(fn(res) { res.body })
+      |> result.map_error(error.JsonDecodeError)
     }
-    Error(err) -> Error(error.JsonDecodeError(err))
+    404 -> Error(error.http_not_found_error(dependency_name: dependency.name))
+    code ->
+      Error(error.http_unexpected_error(
+        status_code: code,
+        dependency_name: dependency.name,
+      ))
   }
 }
 

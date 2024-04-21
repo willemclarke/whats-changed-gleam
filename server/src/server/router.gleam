@@ -9,7 +9,8 @@ import server/database
 import server/npm
 import common
 import gleam/set
-import gleam/io
+import server/error
+import gleam/dict
 
 pub fn handle_request(
   req: Request,
@@ -21,12 +22,12 @@ pub fn handle_request(
   use json <- wisp.require_json(req)
 
   case wisp.path_segments(request) {
-    ["releases"] -> get_releases_handler(request, json, context)
+    ["process"] -> get_processed_dependencies(request, json, context)
     _ -> wisp.not_found()
   }
 }
 
-fn get_releases_handler(
+fn get_processed_dependencies(
   _: Request,
   json: Dynamic,
   context: web.Context,
@@ -34,59 +35,148 @@ fn get_releases_handler(
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {
-    Ok(dependencies) -> get_releases(dependencies, context.db)
+    Ok(client_dependencies) ->
+      get_processed_dependencies_handler(client_dependencies, context.db)
     Error(_) -> wisp.unprocessable_entity()
   }
 }
 
-fn get_releases(dependencies: List(common.Dependency), db: database.Connection) {
-  let releases_from_cache = get_releases_from_cache(dependencies, db)
-  let cache_keys =
-    list.map(releases_from_cache, fn(release) { release.dependency_name })
-    |> set.from_list
-
+fn get_processed_dependencies_handler(
+  client_dependencies: List(common.ClientDependency),
+  db: database.Connection,
+) {
+  let releases_from_cache = get_releases_from_cache(client_dependencies, db)
   let dependencies_not_in_cache =
-    list.filter(dependencies, fn(dependency) {
-      !set.contains(cache_keys, dependency.name)
-    })
+    get_deps_not_in_cache(client_dependencies, releases_from_cache)
+
+  let cache_dependecy_map =
+    common.dependency_map_from_releases(releases_from_cache)
 
   case dependencies_not_in_cache {
     [] -> {
-      wisp.json_response(github.encode_releases(releases_from_cache), 200)
+      wisp.json_response(common.encode_dependency_map(cache_dependecy_map), 200)
     }
 
     rest_dependencies -> {
-      let releases_from_github = get_releases_from_github(rest_dependencies)
-      database.insert_releases(db, releases_from_github)
+      let external_processed_deps =
+        get_external_processed_dependencies(rest_dependencies)
 
-      let combined_releases =
-        list.append(releases_from_cache, releases_from_github)
+      let insertable_releases =
+        common.releases_from_processed_dependency(external_processed_deps)
+      database.insert_releases(db, insertable_releases)
 
-      wisp.json_response(github.encode_releases(combined_releases), 200)
+      let external_dependency_map =
+        common.dependency_map_from_processed_dependencies(
+          external_processed_deps,
+        )
+
+      let combined = dict.merge(cache_dependecy_map, external_dependency_map)
+
+      wisp.json_response(common.encode_dependency_map(combined), 200)
     }
   }
 }
 
-// TODO: handle unwrapping the Error values and mapping them into a type
-fn get_releases_from_github(
-  dependencies: List(common.Dependency),
-) -> List(github.Release) {
-  let repositories =
-    list.map(dependencies, npm.get_repository_meta)
-    |> result.values()
-
-  list.map(repositories, github.get_releases_for_repository)
-  |> result.values
-  |> list.flatten
-}
-
 fn get_releases_from_cache(
-  dependencies: List(common.Dependency),
+  client_dependencies: List(common.ClientDependency),
   db: database.Connection,
-) -> List(github.Release) {
-  dependencies
+) -> List(common.Release) {
+  client_dependencies
   |> list.try_map(fn(dependency) { database.get_releases(db, dependency) })
   |> result.unwrap([])
   |> list.flatten
-  |> list.map(database.from_db_release)
+}
+
+fn get_deps_not_in_cache(
+  client_dependencies: List(common.ClientDependency),
+  releases: List(common.Release),
+) -> List(common.ClientDependency) {
+  let cache_keys =
+    list.map(releases, fn(release) { release.dependency_name })
+    |> set.from_list
+
+  let dependencies_not_in_cache =
+    list.filter(client_dependencies, fn(dependency) {
+      !set.contains(cache_keys, dependency.name)
+    })
+  dependencies_not_in_cache
+}
+
+fn get_external_processed_dependencies(
+  dependencies: List(common.ClientDependency),
+) -> List(common.ProcessedDependency) {
+  let separated_packages =
+    dependencies
+    |> list.map(npm.get_package_meta)
+    |> separate_packages
+
+  let processed_dependencies =
+    separated_packages.found_packages
+    |> list.map(fn(repository) {
+      repository
+      |> github.get_releases_for_repository()
+      |> processed_dependency_from_releases(repository.dependency_name)
+    })
+
+  let to_not_found =
+    list.map(separated_packages.not_found_packages, common.as_not_found)
+
+  list.append(processed_dependencies, to_not_found)
+}
+
+fn processed_dependency_from_releases(
+  releases: Result(List(common.Release), error.Error),
+  dependency_name: String,
+) -> common.ProcessedDependency {
+  case releases {
+    Ok(releases_) -> {
+      case releases_ {
+        [] -> common.as_no_releases(dependency_name)
+        _ -> common.as_has_releases(dependency_name, releases_)
+      }
+    }
+
+    Error(err) -> {
+      case err {
+        error.Http(error.NotFound(_, name)) -> common.as_no_releases(name)
+        _ -> common.as_no_releases(dependency_name)
+      }
+    }
+  }
+}
+
+type SeparatedPackages {
+  SeparatedPackages(
+    not_found_packages: List(String),
+    found_packages: List(npm.PackageMeta),
+  )
+}
+
+fn separate_packages(
+  packages: List(Result(npm.PackageMeta, error.Error)),
+) -> SeparatedPackages {
+  list.fold(
+    packages,
+    SeparatedPackages(not_found_packages: [], found_packages: []),
+    fn(acc, result) {
+      case result {
+        Ok(meta) ->
+          SeparatedPackages(
+            ..acc,
+            found_packages: list.append(acc.found_packages, [meta]),
+          )
+        Error(err) -> {
+          case err {
+            error.Http(error.NotFound(_, name)) -> {
+              SeparatedPackages(
+                ..acc,
+                not_found_packages: list.append(acc.not_found_packages, [name]),
+              )
+            }
+            _ -> acc
+          }
+        }
+      }
+    },
+  )
 }

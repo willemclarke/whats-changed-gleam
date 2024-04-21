@@ -1,5 +1,6 @@
 import gleam/json
 import sqlight
+import common
 
 pub type Error {
   Http(HttpClientError)
@@ -47,4 +48,15 @@ pub fn invalid_semver_version_error(
 
 pub fn releases_not_found_error(dependency_name name: String) -> Error {
   Releases(NoReleasesFound(name))
+}
+
+pub fn to_dependency(error: Error, name: String) -> common.ProcessedDependency {
+  case error {
+    Http(NotFound(_, dependency_name)) -> common.as_not_found(dependency_name)
+
+    Releases(NoReleasesFound(dependency_name)) ->
+      common.as_no_releases(dependency_name)
+
+    _ -> common.as_no_releases(name)
+  }
 }

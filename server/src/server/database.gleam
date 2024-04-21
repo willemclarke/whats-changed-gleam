@@ -2,7 +2,6 @@ import sqlight
 import server/error
 import gleam/result
 import gleam/dynamic
-import server/github
 import gleam/option.{type Option}
 import common
 import gluid
@@ -48,12 +47,10 @@ pub type DbRelease {
 
 pub fn get_releases(
   db: Connection,
-  dependency: common.Dependency,
-) -> Result(List(DbRelease), error.Error) {
+  dependency: common.ClientDependency,
+) -> Result(List(common.Release), error.Error) {
   let query =
-    "
-    SELECT * FROM releases WHERE dependency_name = $1 AND version >= $2 ORDER BY version desc
-  "
+    "SELECT * FROM releases WHERE dependency_name = $1 AND version >= $2 ORDER BY version desc"
 
   let parameters = [
     sqlight.text(dependency.name),
@@ -66,16 +63,17 @@ pub fn get_releases(
     with: parameters,
     expecting: decode_db_release,
   )
+  |> result.map(from_db_releases)
   |> result.map_error(error.DatabaseError)
 }
 
-pub fn insert_releases(db: Connection, releases: List(github.Release)) -> Nil {
+pub fn insert_releases(db: Connection, releases: List(common.Release)) -> Nil {
   list.each(releases, fn(release) { insert_release(db, release) })
 }
 
 pub fn insert_release(
   db: Connection,
-  release: github.Release,
+  release: common.Release,
 ) -> Result(Nil, error.Error) {
   let query =
     "
@@ -98,15 +96,18 @@ pub fn insert_release(
   |> result.map_error(error.DatabaseError)
 }
 
-pub fn from_db_release(db_release: DbRelease) -> github.Release {
-  github.Release(
-    tag_name: db_release.tag_name,
-    dependency_name: db_release.dependency_name,
-    name: db_release.name,
-    url: db_release.url,
-    version: db_release.version,
-    created_at: db_release.created_at,
-  )
+pub fn from_db_releases(db_releases: List(DbRelease)) -> List(common.Release) {
+  db_releases
+  |> list.map(fn(db_release) {
+    common.Release(
+      tag_name: db_release.tag_name,
+      dependency_name: db_release.dependency_name,
+      name: db_release.name,
+      url: db_release.url,
+      version: db_release.version,
+      created_at: db_release.created_at,
+    )
+  })
 }
 
 fn decode_db_release(

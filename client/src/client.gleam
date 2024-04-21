@@ -9,6 +9,7 @@ import lustre/element/html
 import lustre/event
 import lustre_http
 
+// -- Model --
 pub type Model {
   Model(count: Int, cats: List(String))
 }
@@ -17,6 +18,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(Model(0, []), effect.none())
 }
 
+// -- Update --
 pub type Msg {
   Increment
   Decrement
@@ -42,6 +44,8 @@ fn get_cat() -> effect.Effect(Msg) {
   lustre_http.get("https://cataas.com/cat?json=true", expect)
 }
 
+// -- View --
+
 pub fn view(model: Model) -> element.Element(Msg) {
   let count = int.to_string(model.count)
 
@@ -49,6 +53,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
     html.button([event.on_click(Increment)], [element.text("+")]),
     element.text(count),
     html.button([event.on_click(Decrement)], [element.text("-")]),
+    html.textarea([], "hello"),
     html.div(
       [],
       list.map(model.cats, fn(cat) {
