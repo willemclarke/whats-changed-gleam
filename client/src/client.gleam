@@ -8,40 +8,66 @@ import lustre/element
 import lustre/element/html
 import lustre/event
 import lustre_http
+import common
+import gleam/dict
+import gleam/json
+import gleam/io
 
 // -- Model --
 pub type Model {
-  Model(count: Int, cats: List(String))
+  Model(count: Int, dependency_map: common.DependencyMap)
 }
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
-  #(Model(0, []), effect.none())
+  #(Model(0, dict.new()), effect.none())
 }
 
 // -- Update --
 pub type Msg {
   Increment
   Decrement
-  GotCat(Result(String, lustre_http.HttpError))
+  GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
-    Increment -> #(Model(..model, count: model.count + 1), get_cat())
+    Increment -> #(Model(..model, count: model.count + 1), get_dependencies())
     Decrement -> #(Model(..model, count: model.count - 1), effect.none())
-    GotCat(Ok(cat)) -> #(
-      Model(..model, cats: [cat, ..model.cats]),
-      effect.none(),
-    )
-    GotCat(Error(_)) -> #(model, effect.none())
+    GotDependencyMap(Ok(map)) -> {
+      io.debug(#("model", model))
+      #(
+        Model(..model, dependency_map: dict.merge(model.dependency_map, map)),
+        effect.none(),
+      )
+    }
+    GotDependencyMap(Error(err)) -> {
+      io.debug(err)
+      #(model, effect.none())
+    }
   }
 }
 
-fn get_cat() -> effect.Effect(Msg) {
-  let decoder = dynamic.field("_id", dynamic.string)
-  let expect = lustre_http.expect_json(decoder, GotCat)
+fn get_dependencies() -> effect.Effect(Msg) {
+  let decoder = common.decode_dependency_map
+  let expect = lustre_http.expect_json(decoder, GotDependencyMap)
 
-  lustre_http.get("https://cataas.com/cat?json=true", expect)
+  let body = fn(client_deps: List(common.ClientDependency)) {
+    json.array(client_deps, fn(dep) {
+      json.object([
+        #("name", json.string(dep.name)),
+        #("version", json.string(dep.version)),
+      ])
+    })
+  }
+
+  let dependencies = [
+    common.ClientDependency(name: "idb", version: "8.0.0"),
+    common.ClientDependency(name: "typescript", version: "4.1.1"),
+    common.ClientDependency(name: "react-query", version: "3.5.1"),
+    common.ClientDependency(name: "woopdeedoo", version: "1.2.3"),
+  ]
+
+  lustre_http.post("http://localhost:8080/process", body(dependencies), expect)
 }
 
 // -- View --
@@ -56,9 +82,11 @@ pub fn view(model: Model) -> element.Element(Msg) {
     html.textarea([], "hello"),
     html.div(
       [],
-      list.map(model.cats, fn(cat) {
-        html.img([attribute.src("https://cataas.com/cat/" <> cat)])
-      }),
+      dict.to_list(model.dependency_map)
+        |> list.map(fn(pair) {
+          let #(name, _) = pair
+          html.div([], [html.text(name)])
+        }),
     ),
   ])
 }

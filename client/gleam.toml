@@ -12,8 +12,11 @@ version = "1.0.0"
 
 [dependencies]
 gleam_stdlib = "~> 0.32"
+common = {path = "../common"}
 lustre = "~> 4.1"
 lustre_http = "~> 0.5"
+gleam_json = "~> 1.0"
+gleam_http = "~> 3.6"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"
