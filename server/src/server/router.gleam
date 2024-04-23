@@ -36,12 +36,12 @@ fn get_processed_dependencies(
 
   case decoded_deps {
     Ok(client_dependencies) ->
-      get_processed_dependencies_handler(client_dependencies, context.db)
+      processed_dependencies_handler(client_dependencies, context.db)
     Error(_) -> wisp.unprocessable_entity()
   }
 }
 
-fn get_processed_dependencies_handler(
+fn processed_dependencies_handler(
   client_dependencies: List(common.ClientDependency),
   db: database.Connection,
 ) {
@@ -71,7 +71,6 @@ fn get_processed_dependencies_handler(
         )
 
       let combined = dict.merge(cache_dependecy_map, external_dependency_map)
-
       wisp.json_response(common.encode_dependency_map(combined), 200)
     }
   }
@@ -161,16 +160,13 @@ fn separate_packages(
     fn(acc, result) {
       case result {
         Ok(meta) ->
-          SeparatedPackages(
-            ..acc,
-            found_packages: list.append(acc.found_packages, [meta]),
-          )
+          SeparatedPackages(..acc, found_packages: [meta, ..acc.found_packages])
         Error(err) -> {
           case err {
             error.Http(error.NotFound(_, name)) -> {
               SeparatedPackages(
                 ..acc,
-                not_found_packages: list.append(acc.not_found_packages, [name]),
+                not_found_packages: [name, ..acc.not_found_packages],
               )
             }
             _ -> acc
