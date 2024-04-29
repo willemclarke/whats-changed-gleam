@@ -1,5 +1,6 @@
 import client/accordion
 import client/api
+import client/toast
 import common
 import gleam/dict
 import gleam/dynamic
@@ -9,6 +10,7 @@ import gleam/list
 import gleam/pair
 import gleam/result
 import gleam/string
+import gluid
 import lustre
 import lustre/attribute
 import lustre/effect
@@ -24,6 +26,7 @@ pub type Model {
     dependency_map: common.DependencyMap,
     accordion1: accordion.Model,
     input_value: String,
+    toasts: List(#(toast.ToastType, String)),
   )
 }
 
@@ -33,6 +36,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       dependency_map: dict.new(),
       accordion1: pair.first(accordion.init()),
       input_value: "",
+      toasts: [],
     ),
     effect.none(),
   )
@@ -44,6 +48,7 @@ pub type Msg {
   OnSubmitClicked
   GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
   Accordion1(accordion.Msg)
+  CloseToast(String)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -54,9 +59,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       case verified {
         Ok(client_dependencies) -> {
-          io.debug(#("client_deps", client_dependencies))
           #(
-            model,
+            show_toast(model, toast.Success("Processing dependencies")),
             api.process_dependencies(GotDependencyMap, client_dependencies),
           )
         }
@@ -64,11 +68,12 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         Error(error) -> {
           case error {
             EmptyInput -> #(
-              Model(..model, input_value: "empty_input"),
+              show_toast(model, toast.Error("Input cannot be empty")),
               effect.none(),
             )
+
             NotValidJson -> #(
-              Model(..model, input_value: "not_valid_json"),
+              show_toast(model, toast.Error("Please provide valid json")),
               effect.none(),
             )
           }
@@ -86,7 +91,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       let #(accordion, cmd) = accordion.update(model.accordion1, msg_)
       #(Model(..model, accordion1: accordion), effect.map(cmd, Accordion1))
     }
+    CloseToast(toast_id) -> {
+      let filtered_toasts =
+        list.filter(model.toasts, fn(toast) { pair.second(toast) != toast_id })
+
+      #(Model(..model, toasts: filtered_toasts), effect.none())
+    }
   }
+}
+
+fn show_toast(model: Model, toast_type: toast.ToastType) -> Model {
+  let new_toast = #(toast_type, gluid.guidv4())
+  Model(..model, toasts: [new_toast, ..model.toasts])
 }
 
 type Error {
@@ -192,6 +208,12 @@ fn decode_json_dependecies(
 // -- View --
 
 pub fn view(model: Model) -> element.Element(Msg) {
+  let toasts =
+    list.map(model.toasts, fn(toast) {
+      let #(type_, id) = toast
+      toast.view(type_, CloseToast(id))
+    })
+
   html.div(
     [
       attribute.class(
@@ -199,6 +221,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
       ),
     ],
     [
+      toast.region(toasts),
       html.h3([attribute.class("text-2xl font-semibold")], [
         html.text("whats-changed"),
       ]),

@@ -23,6 +23,7 @@ packages = [
   { name = "gleeunit", version = "1.1.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "72CDC3D3F719478F26C4E2C5FED3E657AC81EC14A47D2D2DEBB8693CA3220C3B" },
   { name = "glint", version = "0.18.1", build_tools = ["gleam"], requirements = ["gleam_community_ansi", "gleam_community_colour", "gleam_stdlib", "snag"], otp_app = "glint", source = "hex", outer_checksum = "5FB54D7732B4105E4AF4D89A7EE6D5E8CF33DA13A3575D0C6ECE470B97958454" },
   { name = "glisten", version = "2.0.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "glisten", source = "hex", outer_checksum = "CF3A9383E9BA4A8CBAF2F7B799716290D02F2AC34E7A77556B49376B662B9314" },
+  { name = "gluid", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gluid", source = "hex", outer_checksum = "9C0D64DC9A345B7DCC76A2EFDC1F3479E3C6A08A1FB81156E9CCED959F8DEB78" },
   { name = "hpack_erl", version = "0.3.0", build_tools = ["rebar3"], requirements = [], otp_app = "hpack", source = "hex", outer_checksum = "D6137D7079169D8C485C6962DFE261AF5B9EF60FBC557344511C1E65E3D95FB0" },
   { name = "logging", version = "1.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "82C112ED9B6C30C1772A6FE2613B94B13F62EA35F5869A2630D13948D297BD39" },
   { name = "lustre", version = "4.2.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib"], otp_app = "lustre", source = "hex", outer_checksum = "258F876CD7AB12C2C773F1A30F76DFC0A0ED989B720070DF32FC0717A6A0E60C" },
@@ -49,7 +50,8 @@ gleam_http = { version = "~> 3.6" }
 gleam_json = { version = "~> 1.0" }
 gleam_stdlib = { version = "~> 0.32" }
 gleeunit = { version = "~> 1.0" }
+gluid = { version = ">= 1.0.0 and < 2.0.0"}
 lustre = { version = "~> 4.2.0" }
 lustre_dev_tools = { version = "~> 1.2.2" }
 lustre_http = { version = "~> 0.5" }
-tardis = { version = ">= 0.1.0 and < 1.0.0"}
+tardis = { version = ">= 0.1.0 and < 1.0.0" }
