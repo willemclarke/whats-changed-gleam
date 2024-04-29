@@ -1,11 +1,11 @@
-import sqlight
-import server/error
-import gleam/result
-import gleam/dynamic
-import gleam/option.{type Option}
 import common
-import gluid
+import gleam/dynamic
 import gleam/list
+import gleam/option.{type Option}
+import gleam/result
+import gluid
+import server/error
+import sqlight
 
 pub opaque type Connection {
   Connection(inner: sqlight.Connection)
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS releases (
   version TEXT NOT NULL,
   url TEXT NOT NULL,
   created DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  UNIQUE (name, tag_name)
+  UNIQUE (dependency_name, version)
 );
 "
 
@@ -67,8 +67,11 @@ pub fn get_releases(
   |> result.map_error(error.DatabaseError)
 }
 
-pub fn insert_releases(db: Connection, releases: List(common.Release)) -> Nil {
-  list.each(releases, fn(release) { insert_release(db, release) })
+pub fn insert_releases(
+  db: Connection,
+  releases: List(common.Release),
+) -> Result(Nil, error.Error) {
+  list.try_each(releases, fn(release) { insert_release(db, release) })
 }
 
 pub fn insert_release(
@@ -79,7 +82,7 @@ pub fn insert_release(
     "
     INSERT INTO releases (id, name, tag_name, dependency_name, version, url)
     VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (name, tag_name) DO NOTHING
+    ON CONFLICT (dependency_name, version) DO NOTHING
   "
 
   let parameters = [

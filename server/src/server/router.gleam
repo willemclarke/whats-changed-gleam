@@ -1,16 +1,16 @@
-import wisp.{type Request}
-import gleam/http.{Post}
+import common
+import gleam/dict
 import gleam/dynamic.{type Dynamic}
+import gleam/http.{Post}
 import gleam/list
 import gleam/result
-import server/web
-import server/github
-import server/database
-import server/npm
-import common
 import gleam/set
+import server/database
 import server/error
-import gleam/dict
+import server/github
+import server/npm
+import server/web
+import wisp.{type Request}
 
 pub fn handle_request(
   req: Request,
