@@ -2,9 +2,13 @@ import client/accordion
 import client/api
 import common
 import gleam/dict
+import gleam/dynamic
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/pair
+import gleam/result
+import gleam/string
 import lustre
 import lustre/attribute
 import lustre/effect
@@ -12,29 +16,31 @@ import lustre/element
 import lustre/element/html
 import lustre/event
 import lustre_http
-
-// hardcoding for now
-const dependencies: List(common.ClientDependency) = [
-  common.ClientDependency(name: "idb", version: "8.0.0"),
-  common.ClientDependency(name: "typescript", version: "4.1.1"),
-  common.ClientDependency(name: "react-query", version: "3.5.1"),
-  common.ClientDependency(name: "woopdeedoo", version: "1.2.3"),
-]
+import tardis
 
 // -- Model --
 pub type Model {
-  Model(dependency_map: common.DependencyMap, accordion1: accordion.Model)
+  Model(
+    dependency_map: common.DependencyMap,
+    accordion1: accordion.Model,
+    input_value: String,
+  )
 }
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(
-    Model(dependency_map: dict.new(), accordion1: pair.first(accordion.init())),
+    Model(
+      dependency_map: dict.new(),
+      accordion1: pair.first(accordion.init()),
+      input_value: "",
+    ),
     effect.none(),
   )
 }
 
 // -- Update --
 pub type Msg {
+  OnInputChange(String)
   OnSubmitClicked
   GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
   Accordion1(accordion.Msg)
@@ -42,10 +48,33 @@ pub type Msg {
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
-    OnSubmitClicked -> #(
-      model,
-      api.process_dependencies(GotDependencyMap, dependencies),
-    )
+    OnInputChange(value) -> #(Model(..model, input_value: value), effect.none())
+    OnSubmitClicked -> {
+      let verified = verify_input(model.input_value)
+
+      case verified {
+        Ok(client_dependencies) -> {
+          io.debug(#("client_deps", client_dependencies))
+          #(
+            model,
+            api.process_dependencies(GotDependencyMap, client_dependencies),
+          )
+        }
+
+        Error(error) -> {
+          case error {
+            EmptyInput -> #(
+              Model(..model, input_value: "empty_input"),
+              effect.none(),
+            )
+            NotValidJson -> #(
+              Model(..model, input_value: "not_valid_json"),
+              effect.none(),
+            )
+          }
+        }
+      }
+    }
     GotDependencyMap(Ok(map)) -> {
       #(Model(..model, dependency_map: map), effect.none())
     }
@@ -60,34 +89,137 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
+type Error {
+  EmptyInput
+  NotValidJson
+}
+
+type JsonDependencies {
+  JsonDependencies(
+    dependencies: JsonDependency,
+    dev_dependencies: JsonDependency,
+  )
+}
+
+type JsonDependency =
+  dict.Dict(String, String)
+
+fn verify_input(
+  input_value: String,
+) -> Result(List(common.ClientDependency), Error) {
+  case string.is_empty(input_value) {
+    True -> Error(EmptyInput)
+    False -> {
+      json.decode(input_value, extract_client_dependencies)
+      |> result.replace_error(NotValidJson)
+    }
+  }
+}
+
+fn extract_client_dependencies(
+  json: dynamic.Dynamic,
+) -> Result(List(common.ClientDependency), List(dynamic.DecodeError)) {
+  decode_json_dependecies(json)
+  |> result.map(fn(json_deps) {
+    list.append(
+      to_client_dependency(json_deps.dependencies),
+      to_client_dependency(json_deps.dev_dependencies),
+    )
+    |> fold_client_dependencies
+  })
+}
+
+fn fold_client_dependencies(
+  dependencies: List(common.ClientDependency),
+) -> List(common.ClientDependency) {
+  list.fold(dependencies, [], fn(acc, dependency) {
+    let is_unsupported = is_unsupported_version(dependency.version)
+    let is_types_dep = is_types_dependency(dependency.name)
+
+    case is_unsupported, is_types_dep {
+      True, True -> acc
+      True, False -> acc
+      False, True -> acc
+      False, False -> [clean_version(dependency), ..acc]
+    }
+  })
+}
+
+fn clean_version(dependency: common.ClientDependency) -> common.ClientDependency {
+  let cleaned_version =
+    dependency.version
+    |> string.replace("^", "")
+    |> string.replace("~", "")
+
+  common.ClientDependency(..dependency, version: cleaned_version)
+}
+
+fn is_unsupported_version(version: String) -> Bool {
+  case version {
+    "latest" -> True
+    "workspace:*" -> True
+    _ -> False
+  }
+}
+
+fn is_types_dependency(name: String) -> Bool {
+  string.starts_with(name, "@types/")
+}
+
+fn to_client_dependency(
+  json_dependency: JsonDependency,
+) -> List(common.ClientDependency) {
+  dict.to_list(json_dependency)
+  |> list.map(fn(pair) {
+    let #(name, version) = pair
+    common.ClientDependency(name, version)
+  })
+}
+
+fn decode_json_dependecies(
+  json: dynamic.Dynamic,
+) -> Result(JsonDependencies, List(dynamic.DecodeError)) {
+  dynamic.decode2(
+    JsonDependencies,
+    dynamic.field("dependencies", dynamic.dict(dynamic.string, dynamic.string)),
+    dynamic.field(
+      "devDependencies",
+      dynamic.dict(dynamic.string, dynamic.string),
+    ),
+  )(json)
+}
+
 // -- View --
 
 pub fn view(model: Model) -> element.Element(Msg) {
   html.div(
     [
       attribute.class(
-        "flex bg-slate-50 h-full w-full justify-center items-center flex-col gap-y-4",
+        "flex h-full w-full justify-center items-center flex-col gap-y-4",
       ),
     ],
     [
-      html.h3([attribute.class("text-xl font-semibold")], [
+      html.h3([attribute.class("text-2xl font-semibold")], [
         html.text("whats-changed"),
       ]),
-      html.div([attribute.class("w-96")], [
-        accordion.view(model.accordion1)
-        |> element.map(Accordion1),
-      ]),
+      // html.div([attribute.class("w-96")], [
+      //   accordion.view(model.accordion1)
+      //   |> element.map(Accordion1),
+      // ]),
       html.textarea(
         [
-          attribute.class("h-2/3 w-80"),
+          attribute.class(
+            "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+          ),
+          event.on_input(OnInputChange),
           attribute.placeholder("paste package.json here"),
         ],
-        "hello",
+        model.input_value,
       ),
       html.button(
         [
           attribute.class(
-            "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded",
+            "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
           ),
           event.on_click(OnSubmitClicked),
         ],
@@ -106,7 +238,12 @@ pub fn view(model: Model) -> element.Element(Msg) {
 }
 
 pub fn main() {
-  let app = lustre.application(init, update, view)
-  let assert Ok(_) = lustre.start(app, "#app", Nil)
+  let assert Ok(main) = tardis.single("main")
+
+  lustre.application(init, update, view)
+  |> tardis.wrap(with: main)
+  |> lustre.start("#app", Nil)
+  |> tardis.activate(with: main)
+
   Nil
 }

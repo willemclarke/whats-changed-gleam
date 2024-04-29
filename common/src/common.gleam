@@ -1,10 +1,9 @@
+import gleam/dict
 import gleam/dynamic
 import gleam/json
-import gleam/option.{type Option}
 import gleam/list
-import gleam/dict
+import gleam/option.{type Option}
 import gleam/string_builder.{type StringBuilder}
-import gleam/io
 
 // ---- ClientDependency type represents data sent from Client -> Server ----
 pub type ClientDependency {
@@ -119,7 +118,9 @@ pub fn as_no_releases(dependency_name: String) -> ProcessedDependency {
 
 // ---- decoders ----
 
-pub fn decode_dependency_map(json: dynamic.Dynamic) {
+pub fn decode_dependency_map(
+  json: dynamic.Dynamic,
+) -> Result(DependencyMap, List(dynamic.DecodeError)) {
   dynamic.dict(dynamic.string, decode_processed_dependency)(json)
 }
 

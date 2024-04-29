@@ -1,9 +1,12 @@
 import lustre/element
 import lustre/element/html
 
-pub fn view_if(bool: Bool, msg: element.Element(msg)) -> element.Element(msg) {
-  case bool {
-    True -> msg
+pub fn view_if(
+  is_true condition: Bool,
+  element ele: element.Element(msg),
+) -> element.Element(msg) {
+  case condition {
+    True -> ele
     False -> html.text("")
   }
 }

@@ -1,11 +1,11 @@
-import wisp
-import mist
-import server/router
-import gleam/erlang/process
-import server/web
 import dot_env
 import dot_env/env
+import gleam/erlang/process
+import mist
 import server/database
+import server/router
+import server/web
+import wisp
 
 pub fn main() {
   wisp.configure_logger()

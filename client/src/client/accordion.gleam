@@ -2,7 +2,6 @@ import client/html_extra
 import gleam/bool
 import lustre/attribute
 import lustre/effect
-import lustre/element
 import lustre/element/html
 import lustre/event
 
@@ -35,13 +34,13 @@ pub fn view(model: Model) {
             "flex items-center justify-between w-full p-3 font-medium rtl:text-right text-gray-500 border border-b-0 border-gray-200 rounded-t-xl focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-800 dark:border-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 gap-3",
           ),
         ],
-        [html.text("Accordion title goes here")],
+        [html.text("Accordion title goes here haha woo dee doo")],
       ),
     ]),
     html.div([attribute.class(aria_hidden)], []),
     html_extra.view_if(
-      model.is_open,
-      html.div(
+      is_true: model.is_open,
+      element: html.div(
         [
           attribute.class(
             "p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
@@ -49,7 +48,7 @@ pub fn view(model: Model) {
         ],
         [
           html.p([attribute.class("mb-2 text-gray-500 dark:text-gray-400")], [
-            html.text("This is the accordion body hahahah lmao"),
+            html.text("Accordion body will go here hehhe"),
           ]),
         ],
       ),
