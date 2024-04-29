@@ -1,20 +1,20 @@
-import gleam/httpc
+import common
+import dot_env/env
+import gleam/dynamic.{type Dynamic}
 import gleam/http/request
 import gleam/http/response
-import gleam/dynamic.{type Dynamic}
+import gleam/httpc
+import gleam/io
 import gleam/json
 import gleam/list
-import gleam/io
+import gleam/option.{type Option, Some}
+import gleam/regex
 import gleam/result
+import gleam/string
+import gleam/string_builder.{type StringBuilder}
 import server/error
 import server/npm
 import server/verl
-import gleam/string
-import gleam/option.{type Option, Some}
-import dot_env/env
-import gleam/string_builder.{type StringBuilder}
-import common
-import gleam/regex
 
 // what we get back from githubs api
 pub type GithubRelease {
@@ -40,12 +40,7 @@ pub fn get_releases_for_npm_package(
     Ok(version) -> {
       let releases =
         paginate_github_releases(package: package, stop_predicate: fn(release) {
-          version_from_tag_name(release.tag_name)
-          |> verl.parse
-          |> result.map(fn(release_version) {
-            verl.lt(release_version, version)
-          })
-          |> result.unwrap(False)
+          stop_predicate_fn(release, version)
         })
 
       releases
@@ -62,6 +57,25 @@ pub fn get_releases_for_npm_package(
   }
 }
 
+// if we encounter a release.version that is < our current version (package.json)
+// we want to tell the paginate function to stop
+fn stop_predicate_fn(
+  release: GithubRelease,
+  current_version: verl.Version,
+) -> Bool {
+  let release_version = version_from_tag_name(release.tag_name)
+
+  case release_version {
+    Ok(release_version_) -> {
+      release_version_
+      |> verl.parse
+      |> result.map(fn(version) { verl.lt(version, current_version) })
+      |> result.unwrap(False)
+    }
+    Error(_) -> False
+  }
+}
+
 fn paginate_github_releases(
   package pkg: npm.PackageMeta,
   stop_predicate stop_pred: fn(GithubRelease) -> Bool,
@@ -71,22 +85,28 @@ fn paginate_github_releases(
 
   case initial_response {
     Ok(response) -> {
-      let should_stop = list.any(response.body, stop_pred)
+      case response.body {
+        [] -> Ok(response.body)
 
-      case should_stop {
-        True -> {
-          io.debug(
-            #(
-              "Stopped paginating older version encountered: dependency, version",
-              [pkg.dependency_name, pkg.version],
-            ),
-          )
+        _ -> {
+          let should_stop = list.any(response.body, stop_pred)
 
-          Ok(response.body)
-        }
-        False -> {
-          let next_page_url = get_next_page_url(response)
-          paginate_helper(pkg, response.body, stop_pred, next_page_url)
+          case should_stop {
+            True -> {
+              io.debug(
+                #(
+                  "Stopped paginating older version encountered: dependency, version",
+                  [pkg.dependency_name, pkg.version],
+                ),
+              )
+
+              Ok(response.body)
+            }
+            False -> {
+              let next_page_url = get_next_page_url(response)
+              paginate_helper(pkg, response.body, stop_pred, next_page_url)
+            }
+          }
         }
       }
     }
@@ -182,15 +202,20 @@ fn filter_github_releases(
 ) -> List(GithubRelease) {
   github_releases
   |> list.filter(fn(github_release) {
-    github_release.tag_name
-    |> version_from_tag_name()
-    |> verl.parse()
-    |> result.map(fn(release_version) {
-      !github_release.draft
-      && !github_release.prerelease
-      && verl.gt(release_version, current_version)
-    })
-    |> result.unwrap(False)
+    let to_version = version_from_tag_name(github_release.tag_name)
+    case to_version {
+      Ok(version) -> {
+        version
+        |> verl.parse()
+        |> result.map(fn(release_version) {
+          !github_release.draft
+          && !github_release.prerelease
+          && verl.gt(release_version, current_version)
+        })
+        |> result.unwrap(False)
+      }
+      Error(_) -> False
+    }
   })
 }
 
@@ -198,13 +223,15 @@ fn from_github_releases(
   github_releases: List(GithubRelease),
 ) -> List(common.Release) {
   list.map(github_releases, fn(release) {
+    let assert Ok(version) = version_from_tag_name(release.tag_name)
+
     common.Release(
       tag_name: release.tag_name,
       dependency_name: option.unwrap(release.dependency_name, ""),
       name: release.name,
       created_at: release.created_at,
       url: release.html_url,
-      version: version_from_tag_name(release.tag_name),
+      version: version,
     )
   })
 }
@@ -236,11 +263,12 @@ fn craft_github_request_url(repository: npm.PackageMeta) -> String {
 }
 
 // see tests
-pub fn version_from_tag_name(tag_name) -> String {
+pub fn version_from_tag_name(tag_name) -> Result(String, Nil) {
   let assert Ok(regexp) = regex.from_string("[0-9]+\\.[0-9]+\\.[0-9]+")
   let matches = regex.scan(regexp, tag_name)
-  let assert Ok(head) = list.first(matches)
-  head.content
+
+  list.first(matches)
+  |> result.map(fn(match) { match.content })
 }
 
 // see server_test

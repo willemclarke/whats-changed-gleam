@@ -137,7 +137,6 @@ fn processed_dependency_from_releases(
 
     Error(err) -> {
       case err {
-        error.Http(error.NotFound(_, name)) -> common.as_no_releases(name)
         _ -> common.as_no_releases(dependency_name)
       }
     }

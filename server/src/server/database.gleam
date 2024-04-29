@@ -67,11 +67,8 @@ pub fn get_releases(
   |> result.map_error(error.DatabaseError)
 }
 
-pub fn insert_releases(
-  db: Connection,
-  releases: List(common.Release),
-) -> Result(Nil, error.Error) {
-  list.try_each(releases, fn(release) { insert_release(db, release) })
+pub fn insert_releases(db: Connection, releases: List(common.Release)) -> Nil {
+  list.each(releases, fn(release) { insert_release(db, release) })
 }
 
 pub fn insert_release(

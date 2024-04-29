@@ -8,22 +8,31 @@ pub fn main() {
 
 pub fn version_from_tag_name_test() {
   github.version_from_tag_name("v8.57.0")
+  |> should.be_ok()
   |> should.equal("8.57.0")
 
   github.version_from_tag_name("plugin-legacy@5.3.1")
+  |> should.be_ok()
   |> should.equal("5.3.1")
 
   github.version_from_tag_name("v1.2.3-alpha.4")
+  |> should.be_ok()
   |> should.equal("1.2.3")
 
   github.version_from_tag_name("v9.0.0-rc.0")
+  |> should.be_ok()
   |> should.equal("9.0.0")
 
   github.version_from_tag_name("v1.0.0")
+  |> should.be_ok()
   |> should.equal("1.0.0")
 
   github.version_from_tag_name("v1.11.3")
+  |> should.be_ok()
   |> should.equal("1.11.3")
+
+  github.version_from_tag_name("v5.5-beta")
+  |> should.be_error()
 }
 
 pub fn link_header_url_parsing_test() {
