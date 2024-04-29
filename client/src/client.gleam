@@ -1,5 +1,6 @@
 import client/accordion
 import client/api
+import client/timer
 import client/toast
 import common
 import gleam/dict
@@ -59,23 +60,44 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       case verified {
         Ok(client_dependencies) -> {
+          let toast_id = gluid.guidv4()
+
           #(
-            show_toast(model, toast.Success("Processing dependencies")),
-            api.process_dependencies(GotDependencyMap, client_dependencies),
+            with_toast(
+              model,
+              toast.Success("Processing dependencies"),
+              toast_id,
+            ),
+            effect.batch([
+              api.process_dependencies(GotDependencyMap, client_dependencies),
+              timer.after(4000, CloseToast(toast_id)),
+            ]),
           )
         }
-
         Error(error) -> {
           case error {
-            EmptyInput -> #(
-              show_toast(model, toast.Error("Input cannot be empty")),
-              effect.none(),
-            )
-
-            NotValidJson -> #(
-              show_toast(model, toast.Error("Please provide valid json")),
-              effect.none(),
-            )
+            EmptyInput -> {
+              let toast_id = gluid.guidv4()
+              #(
+                with_toast(
+                  model,
+                  toast.Error("Input cannot be empty"),
+                  toast_id,
+                ),
+                timer.after(4000, CloseToast(toast_id)),
+              )
+            }
+            NotValidJson -> {
+              let toast_id = gluid.guidv4()
+              #(
+                with_toast(
+                  model,
+                  toast.Error("Please provide valid json"),
+                  toast_id,
+                ),
+                timer.after(4000, CloseToast(toast_id)),
+              )
+            }
           }
         }
       }
@@ -83,8 +105,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     GotDependencyMap(Ok(map)) -> {
       #(Model(..model, dependency_map: map), effect.none())
     }
-    GotDependencyMap(Error(err)) -> {
-      io.debug(err)
+    GotDependencyMap(Error(_)) -> {
       #(model, effect.none())
     }
     Accordion1(msg_) -> {
@@ -100,9 +121,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
-fn show_toast(model: Model, toast_type: toast.ToastType) -> Model {
-  let new_toast = #(toast_type, gluid.guidv4())
-  Model(..model, toasts: [new_toast, ..model.toasts])
+fn with_toast(model: Model, toast_type: toast.ToastType, id: String) -> Model {
+  let new_toast = #(toast_type, id)
+  Model(..model, toasts: list.append(model.toasts, [new_toast]))
 }
 
 type Error {
@@ -208,6 +229,7 @@ fn decode_json_dependecies(
 // -- View --
 
 pub fn view(model: Model) -> element.Element(Msg) {
+  // todo: use element.keyed here
   let toasts =
     list.map(model.toasts, fn(toast) {
       let #(type_, id) = toast

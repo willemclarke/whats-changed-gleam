@@ -1,7 +1,9 @@
+import client/icon
 import gleam/io
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
+import lustre/element/svg
 import lustre/event
 
 pub type ToastType {
@@ -11,8 +13,8 @@ pub type ToastType {
 
 fn type_to_appearance(toast_type: ToastType) -> String {
   case toast_type {
-    Success(_) -> "bg-gray-800"
-    Error(_) -> "bg-red-400"
+    Success(_) -> "bg-slate-950"
+    Error(_) -> "bg-red-600"
   }
 }
 
@@ -27,7 +29,7 @@ fn view_toast(
     [
       attribute.class(
         appearance
-        <> " text-slate-50 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden",
+        <> " animate-fadein text-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden",
       ),
     ],
     [
@@ -36,12 +38,10 @@ fn view_toast(
           html.p([], [html.text(message)]),
           html.button(
             [
-              attribute.class(
-                "bg-transparent rounded-md inline-flex hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500",
-              ),
+              attribute.class("bg-transparent rounded-md inline-flex"),
               event.on_click(on_close),
             ],
-            [html.text("Close")],
+            [icon.icon("x-circle-fill", icon.Alt("close-toast"))],
           ),
         ]),
       ]),
@@ -53,7 +53,7 @@ pub fn region(toasts: List(Element(msg))) -> Element(msg) {
   html.div(
     [
       attribute.class(
-        "fixed inset-0 flex items-end px-4 py-6 pointer-events-none",
+        "z-10 fixed inset-0 flex items-start px-4 py-6 pointer-events-none",
       ),
     ],
     [
