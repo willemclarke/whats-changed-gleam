@@ -26,7 +26,7 @@ pub fn view(config: Config(msg)) {
     html.div([class(aria_hidden)], []),
     html_extra.view_if(
       is_true: config.is_open,
-      element: html.div(
+      display: html.div(
         [
           class(
             "max-h-52 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",

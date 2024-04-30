@@ -3,10 +3,10 @@ import lustre/element/html
 
 pub fn view_if(
   is_true condition: Bool,
-  element ele: element.Element(msg),
+  display dis: element.Element(msg),
 ) -> element.Element(msg) {
   case condition {
-    True -> ele
+    True -> dis
     False -> html.text("")
   }
 }
