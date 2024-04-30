@@ -34,7 +34,7 @@ pub type Model {
 }
 
 type AccordionsDict =
-  dict.Dict(String, accordion.Model)
+  dict.Dict(String, Bool)
 
 type Toasts =
   List(#(toast.ToastType, String))
@@ -56,7 +56,7 @@ pub type Msg {
   OnInputChange(String)
   OnSubmitClicked
   GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
-  AccordionNClicked(String, accordion.Msg)
+  AccordionNClicked(String, Bool)
   CloseToast(String)
   GotDependencyMapFromLocalStorage(Result(String, Nil))
 }
@@ -158,7 +158,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     GotDependencyMapFromLocalStorage(Error(_)) -> {
       #(model, effect.none())
     }
-    AccordionNClicked(id, msg) -> {
+    AccordionNClicked(id, is_open) -> {
       // when a given accordion is clicked, we need to update that accordion
       // inside the dict so that it has the new state/model for that given accordion (opening or
       // closing it)
@@ -170,15 +170,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           accordion_id == id
         })
 
-      let #(id, accordion_model) = accordion
-      let #(new_model, _) = accordion.update(accordion_model, msg)
+      let accordion_id = pair.first(accordion)
 
       #(
         Model(
           ..model,
-          accordions_dict: dict.update(model.accordions_dict, id, fn(_) {
-            new_model
-          }),
+          accordions_dict: dict.update(
+            model.accordions_dict,
+            accordion_id,
+            fn(_) { !is_open },
+          ),
         ),
         effect.none(),
       )
@@ -198,7 +199,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
   dependency_map
   |> dict.keys()
-  |> list.map(fn(_) { #(gluid.guidv4(), pair.first(accordion.init())) })
+  |> list.map(fn(_) { #(gluid.guidv4(), False) })
   |> dict.from_list
 }
 
@@ -370,15 +371,15 @@ fn view_accordions(
     dependency_map_list,
   )
 
-  let #(id, accordion) = accordion_pair
+  let #(id, is_open) = accordion_pair
   let #(_, processed_dependency) = map_pair
 
-  accordion.view(
-    accordion_title(processed_dependency),
-    view_processed_dependency(processed_dependency),
-    accordion,
-  )
-  |> element.map(fn(msg) { AccordionNClicked(id, msg) })
+  accordion.view(accordion.Config(
+    title: accordion_title(processed_dependency),
+    body: view_processed_dependency(processed_dependency),
+    on_click: AccordionNClicked(id, is_open),
+    is_open: is_open,
+  ))
 }
 
 fn accordion_title(
