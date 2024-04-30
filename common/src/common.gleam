@@ -202,13 +202,14 @@ pub fn encode_dependency_map(dependency_map: DependencyMap) -> StringBuilder {
   |> json.to_string_builder()
 }
 
-pub fn encode_dependency_map_json(dependency_map: DependencyMap) -> json.Json {
+pub fn encode_dependency_map_to_string(dependency_map: DependencyMap) -> String {
   dict.to_list(dependency_map)
   |> list.map(fn(pair) {
     let #(key, processed_dep) = pair
     #(key, encode_processed_dependency(processed_dep))
   })
   |> json.object
+  |> json.to_string()
 }
 
 fn encode_processed_dependency(processed_dep: ProcessedDependency) -> json.Json {

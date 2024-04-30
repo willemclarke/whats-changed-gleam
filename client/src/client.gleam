@@ -2,6 +2,7 @@ import client/api/api
 import client/components/accordion
 import client/components/badge
 import client/components/toast
+import client/local_storage
 import client/timer
 import common
 import gleam/dict
@@ -46,7 +47,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       input_value: "",
       toasts: [],
     ),
-    effect.none(),
+    local_storage.get_key("dependency_map", GotDependencyMapFromLocalStorage),
   )
 }
 
@@ -57,6 +58,7 @@ pub type Msg {
   GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
   AccordionNClicked(String, accordion.Msg)
   CloseToast(String)
+  GotDependencyMapFromLocalStorage(Result(String, Nil))
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -78,6 +80,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
               timer.after(3000, CloseToast(toast_id)),
+              local_storage.set_key("last_searched", model.input_value),
             ]),
           )
         }
@@ -109,20 +112,50 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         }
       }
     }
-    GotDependencyMap(Ok(map)) -> {
-      // when we get the dependency_map back, we need to initialise N accordion models
-      // for each dependency we get back, so if 10 keys we will get 10 models
-      let accordions_dict =
-        dict.keys(map)
-        |> list.map(fn(_) { #(gluid.guidv4(), pair.first(accordion.init())) })
-        |> dict.from_list
-
+    GotDependencyMap(Ok(dependency_map)) -> {
       #(
-        Model(..model, dependency_map: map, accordions_dict: accordions_dict),
-        effect.none(),
+        Model(
+          ..model,
+          dependency_map: dependency_map,
+          accordions_dict: set_accordions_dict(dependency_map),
+        ),
+        local_storage.set_key(
+          "dependency_map",
+          common.encode_dependency_map_to_string(dependency_map),
+        ),
       )
     }
     GotDependencyMap(Error(_)) -> {
+      #(model, effect.none())
+    }
+    GotDependencyMapFromLocalStorage(Ok(string)) -> {
+      let decoded = json.decode(string, common.decode_dependency_map)
+
+      case decoded {
+        Ok(dependency_map) -> {
+          #(
+            Model(
+              ..model,
+              dependency_map: dependency_map,
+              accordions_dict: set_accordions_dict(dependency_map),
+            ),
+            effect.none(),
+          )
+        }
+        Error(_) -> {
+          let toast_id = gluid.guidv4()
+          #(
+            with_toast(
+              model,
+              toast.Error("Unable to read value from local storage"),
+              toast_id,
+            ),
+            effect.none(),
+          )
+        }
+      }
+    }
+    GotDependencyMapFromLocalStorage(Error(_)) -> {
       #(model, effect.none())
     }
     AccordionNClicked(id, msg) -> {
@@ -157,6 +190,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(Model(..model, toasts: filtered_toasts), effect.none())
     }
   }
+}
+
+// when we get the dependency_map back from either BE or localstorage, 
+// we need to initialise N accordion models for each dependency we get back, 
+// so if 10 keys we will get 10 models
+fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
+  dependency_map
+  |> dict.keys()
+  |> list.map(fn(_) { #(gluid.guidv4(), pair.first(accordion.init())) })
+  |> dict.from_list
 }
 
 fn with_toast(model: Model, toast_type: toast.ToastType, id: String) -> Model {

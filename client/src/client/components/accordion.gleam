@@ -44,7 +44,7 @@ pub fn view(title: Element(Msg), body: Element(Msg), model: Model) {
       element: html.div(
         [
           class(
-            "max-h-52 overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
+            "max-h-52 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
           ),
         ],
         [body],
