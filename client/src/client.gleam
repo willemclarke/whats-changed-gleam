@@ -1,11 +1,12 @@
-import client/accordion
-import client/api
-import client/badge
+import client/api/api
+import client/components/accordion
+import client/components/badge
+import client/components/toast
 import client/timer
-import client/toast
 import common
 import gleam/dict
 import gleam/dynamic
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/pair
@@ -13,7 +14,7 @@ import gleam/result
 import gleam/string
 import gluid
 import lustre
-import lustre/attribute
+import lustre/attribute.{class}
 import lustre/effect
 import lustre/element.{type Element}
 import lustre/element/html
@@ -267,21 +268,17 @@ fn decode_json_dependecies(
 
 pub fn view(model: Model) -> Element(Msg) {
   html.div(
-    [
-      attribute.class(
-        "flex h-full w-full justify-center items-center flex-col gap-y-4",
-      ),
-    ],
+    [class("flex h-full w-full justify-center items-center flex-col gap-y-4")],
     [
       view_toasts(model.toasts),
-      html.h3([attribute.class("text-2xl font-semibold my-2")], [
+      html.h3([class("text-2xl font-semibold my-4")], [
         html.text("whats-changed"),
       ]),
-      html.div([attribute.class("flex h-full flex-row gap-x-4")], [
-        html.div([attribute.class("flex flex-col gap-y-2")], [
+      html.div([class("flex h-full flex-row gap-x-4")], [
+        html.div([class("flex flex-col gap-y-2")], [
           html.textarea(
             [
-              attribute.class(
+              class(
                 "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
               ),
               event.on_input(OnInputChange),
@@ -291,7 +288,7 @@ pub fn view(model: Model) -> Element(Msg) {
           ),
           html.button(
             [
-              attribute.class(
+              class(
                 "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
               ),
               event.on_click(OnSubmitClicked),
@@ -331,14 +328,46 @@ fn view_accordions(
   )
 
   let #(id, accordion) = accordion_pair
-  let #(dependency_name, processed_dependency) = map_pair
+  let #(_, processed_dependency) = map_pair
 
   accordion.view(
-    dependency_name,
+    accordion_title(processed_dependency),
     view_processed_dependency(processed_dependency),
     accordion,
   )
   |> element.map(fn(msg) { AccordionNClicked(id, msg) })
+}
+
+fn accordion_title(
+  processed_dependency: common.ProcessedDependency,
+) -> Element(msg) {
+  case processed_dependency {
+    common.HasReleases(_, name, releases) -> {
+      let count =
+        releases
+        |> list.length()
+        |> int.to_string()
+
+      html.div([class("flex flex-row gap-x-2 items-center")], [
+        html.p([class("font-semibold")], [html.text(name)]),
+        html.p([class("text-sm")], [
+          html.text("(" <> count <> " releases" <> ")"),
+        ]),
+      ])
+    }
+    common.NotFound(_, name) -> {
+      html.div([class("flex flex-row gap-x-2 items-center")], [
+        html.p([class("font-semibold")], [html.text(name)]),
+        html.p([class("text-sm")], [html.text("(Dependency not found)")]),
+      ])
+    }
+    common.NoReleases(_, name) -> {
+      html.div([class("flex flex-row gap-x-2 items-center")], [
+        html.p([class("font-semibold")], [html.text(name)]),
+        html.p([class("text-sm")], [html.text("(Dependecy has no releases)")]),
+      ])
+    }
+  }
 }
 
 fn view_processed_dependency(
@@ -347,11 +376,18 @@ fn view_processed_dependency(
   case processed_dependency {
     common.HasReleases(_, _, releases) -> {
       html.div(
-        [attribute.class("flex flex-col gap-y-2")],
+        [class("flex flex-col gap-y-2")],
         list.map(releases, fn(release) {
-          html.div([attribute.class("flex flex-row gap-x-2 w-full")], [
+          html.div([class("flex flex-row gap-x-2 w-full")], [
             badge.view(release.tag_name),
-            html.span([], [html.text(release.url)]),
+            html.a(
+              [
+                attribute.href(release.url),
+                attribute.target("_blank"),
+                class("hover:underline"),
+              ],
+              [html.text(release.url)],
+            ),
           ])
         }),
       )

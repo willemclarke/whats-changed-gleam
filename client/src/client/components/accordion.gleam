@@ -1,6 +1,6 @@
 import client/html_extra
 import gleam/bool
-import lustre/attribute
+import lustre/attribute.{class}
 import lustre/effect
 import lustre/element.{type Element}
 import lustre/element/html
@@ -24,26 +24,26 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
-pub fn view(title: String, body: Element(Msg), model: Model) {
+pub fn view(title: Element(Msg), body: Element(Msg), model: Model) {
   let aria_hidden = bool.guard(model.is_open, "false", fn() { "true" })
 
-  html.div([attribute.class("w-[48rem]"), event.on_click(OnClick)], [
+  html.div([class("w-[48rem]"), event.on_click(OnClick)], [
     html.h2([], [
       html.button(
         [
-          attribute.class(
-            "flex items-center justify-between w-full p-3 font-medium rtl:text-right text-gray-500 border border-b-0 border-gray-200 rounded-t-xl focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-800 dark:border-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 gap-3",
+          class(
+            "flex items-center justify-between w-full p-3 rtl:text-right text-gray-500 border border-b-0 border-gray-200 rounded-t-xl focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-800 dark:border-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 gap-3",
           ),
         ],
-        [html.text(title)],
+        [title],
       ),
     ]),
-    html.div([attribute.class(aria_hidden)], []),
+    html.div([class(aria_hidden)], []),
     html_extra.view_if(
       is_true: model.is_open,
       element: html.div(
         [
-          attribute.class(
+          class(
             "max-h-52 overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
           ),
         ],

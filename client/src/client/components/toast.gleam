@@ -1,9 +1,7 @@
-import client/icon
-import gleam/io
+import client/components/icon
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
-import lustre/element/svg
 import lustre/event
 
 pub type ToastType {
