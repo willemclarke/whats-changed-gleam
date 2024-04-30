@@ -1,11 +1,11 @@
 import client/accordion
 import client/api
+import client/badge
 import client/timer
 import client/toast
 import common
 import gleam/dict
 import gleam/dynamic
-import gleam/io
 import gleam/json
 import gleam/list
 import gleam/pair
@@ -15,7 +15,7 @@ import gluid
 import lustre
 import lustre/attribute
 import lustre/effect
-import lustre/element
+import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import lustre_http
@@ -25,11 +25,17 @@ import tardis
 pub type Model {
   Model(
     dependency_map: common.DependencyMap,
-    accordions_dict: dict.Dict(String, accordion.Model),
+    accordions_dict: AccordionsDict,
     input_value: String,
-    toasts: List(#(toast.ToastType, String)),
+    toasts: Toasts,
   )
 }
+
+type AccordionsDict =
+  dict.Dict(String, accordion.Model)
+
+type Toasts =
+  List(#(toast.ToastType, String))
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(
@@ -259,30 +265,7 @@ fn decode_json_dependecies(
 
 // -- View --
 
-pub fn view(model: Model) -> element.Element(Msg) {
-  // todo: use element.keyed here
-  let toasts =
-    list.map(model.toasts, fn(toast) {
-      let #(type_, id) = toast
-      toast.view(type_, CloseToast(id))
-    })
-
-  let dependency_map_list = dict.to_list(model.dependency_map)
-  let accordion_dict_list = dict.to_list(model.accordions_dict)
-
-  let accordions =
-    list.map2(
-      accordion_dict_list,
-      dependency_map_list,
-      fn(accordion_pair, map_pair) {
-        let #(id, accordion) = accordion_pair
-        let #(dependency_name, _) = map_pair
-
-        accordion.view(dependency_name, "some body", accordion)
-        |> element.map(fn(msg) { AccordionNClicked(id, msg) })
-      },
-    )
-
+pub fn view(model: Model) -> Element(Msg) {
   html.div(
     [
       attribute.class(
@@ -290,7 +273,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
       ),
     ],
     [
-      toast.region(toasts),
+      view_toasts(model.toasts),
       html.h3([attribute.class("text-2xl font-semibold my-2")], [
         html.text("whats-changed"),
       ]),
@@ -316,11 +299,73 @@ pub fn view(model: Model) -> element.Element(Msg) {
             [html.text("Submit")],
           ),
         ]),
-        html.div([], accordions),
+        html.div(
+          [],
+          view_accordions(model.accordions_dict, model.dependency_map),
+        ),
       ]),
     ],
   )
 }
+
+fn view_toasts(toasts: Toasts) {
+  // todo: use element.keyed here
+  toasts
+  |> list.map(fn(toast_tuple) {
+    let #(toast_type, id) = toast_tuple
+    toast.view(toast_type, CloseToast(id))
+  })
+  |> toast.region()
+}
+
+fn view_accordions(
+  accordions_dict: AccordionsDict,
+  dependency_map: common.DependencyMap,
+) -> List(Element(Msg)) {
+  let accordions_dict_list = dict.to_list(accordions_dict)
+  let dependency_map_list = dict.to_list(dependency_map)
+
+  use accordion_pair, map_pair <- list.map2(
+    accordions_dict_list,
+    dependency_map_list,
+  )
+
+  let #(id, accordion) = accordion_pair
+  let #(dependency_name, processed_dependency) = map_pair
+
+  accordion.view(
+    dependency_name,
+    view_processed_dependency(processed_dependency),
+    accordion,
+  )
+  |> element.map(fn(msg) { AccordionNClicked(id, msg) })
+}
+
+fn view_processed_dependency(
+  processed_dependency: common.ProcessedDependency,
+) -> Element(msg) {
+  case processed_dependency {
+    common.HasReleases(_, _, releases) -> {
+      html.div(
+        [attribute.class("flex flex-col gap-y-2")],
+        list.map(releases, fn(release) {
+          html.div([attribute.class("flex flex-row gap-x-2 w-full")], [
+            badge.view(release.tag_name),
+            html.span([], [html.text(release.url)]),
+          ])
+        }),
+      )
+    }
+    common.NotFound(_, _) -> {
+      html.p([], [html.text("Not found")])
+    }
+    common.NoReleases(_, _) -> {
+      html.p([], [html.text("Up to date")])
+    }
+  }
+}
+
+// -- Main --
 
 pub fn main() {
   let assert Ok(main) = tardis.single("main")

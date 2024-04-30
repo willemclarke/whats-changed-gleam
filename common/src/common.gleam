@@ -41,7 +41,7 @@ pub fn encode_dependencies(dependencies: List(ClientDependency)) {
 pub type DependencyMap =
   dict.Dict(String, ProcessedDependency)
 
-pub opaque type ProcessedDependency {
+pub type ProcessedDependency {
   HasReleases(kind: String, dependency_name: String, releases: List(Release))
   NotFound(kind: String, dependency_name: String)
   NoReleases(kind: String, dependency_name: String)

@@ -2,6 +2,7 @@ import client/html_extra
 import gleam/bool
 import lustre/attribute
 import lustre/effect
+import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 
@@ -23,10 +24,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
-pub fn view(title: String, body: String, model: Model) {
+pub fn view(title: String, body: Element(Msg), model: Model) {
   let aria_hidden = bool.guard(model.is_open, "false", fn() { "true" })
 
-  html.div([event.on_click(OnClick)], [
+  html.div([attribute.class("w-[48rem]"), event.on_click(OnClick)], [
     html.h2([], [
       html.button(
         [
@@ -43,14 +44,10 @@ pub fn view(title: String, body: String, model: Model) {
       element: html.div(
         [
           attribute.class(
-            "p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
+            "max-h-52 overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
           ),
         ],
-        [
-          html.p([attribute.class("mb-2 text-gray-500 dark:text-gray-400")], [
-            html.text(body),
-          ]),
-        ],
+        [body],
       ),
     ),
   ])
