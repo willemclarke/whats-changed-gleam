@@ -25,7 +25,7 @@ import tardis
 pub type Model {
   Model(
     dependency_map: common.DependencyMap,
-    accordion1: accordion.Model,
+    accordions_dict: dict.Dict(String, accordion.Model),
     input_value: String,
     toasts: List(#(toast.ToastType, String)),
   )
@@ -35,7 +35,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(
     Model(
       dependency_map: dict.new(),
-      accordion1: pair.first(accordion.init()),
+      accordions_dict: dict.new(),
       input_value: "",
       toasts: [],
     ),
@@ -48,7 +48,7 @@ pub type Msg {
   OnInputChange(String)
   OnSubmitClicked
   GotDependencyMap(Result(common.DependencyMap, lustre_http.HttpError))
-  Accordion1(accordion.Msg)
+  AccordionNClicked(String, accordion.Msg)
   CloseToast(String)
 }
 
@@ -70,7 +70,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             ),
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
-              timer.after(4000, CloseToast(toast_id)),
+              timer.after(3000, CloseToast(toast_id)),
             ]),
           )
         }
@@ -84,7 +84,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
                   toast.Error("Input cannot be empty"),
                   toast_id,
                 ),
-                timer.after(4000, CloseToast(toast_id)),
+                timer.after(3000, CloseToast(toast_id)),
               )
             }
             NotValidJson -> {
@@ -95,7 +95,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
                   toast.Error("Please provide valid json"),
                   toast_id,
                 ),
-                timer.after(4000, CloseToast(toast_id)),
+                timer.after(3000, CloseToast(toast_id)),
               )
             }
           }
@@ -103,14 +103,45 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       }
     }
     GotDependencyMap(Ok(map)) -> {
-      #(Model(..model, dependency_map: map), effect.none())
+      // when we get the dependency_map back, we need to initialise N accordion models
+      // for each dependency we get back, so if 10 keys we will get 10 models
+      let accordions_dict =
+        dict.keys(map)
+        |> list.map(fn(_) { #(gluid.guidv4(), pair.first(accordion.init())) })
+        |> dict.from_list
+
+      #(
+        Model(..model, dependency_map: map, accordions_dict: accordions_dict),
+        effect.none(),
+      )
     }
     GotDependencyMap(Error(_)) -> {
       #(model, effect.none())
     }
-    Accordion1(msg_) -> {
-      let #(accordion, cmd) = accordion.update(model.accordion1, msg_)
-      #(Model(..model, accordion1: accordion), effect.map(cmd, Accordion1))
+    AccordionNClicked(id, msg) -> {
+      // when a given accordion is clicked, we need to update that accordion
+      // inside the dict so that it has the new state/model for that given accordion (opening or
+      // closing it)
+      let assert Ok(accordion) =
+        model.accordions_dict
+        |> dict.to_list()
+        |> list.find(fn(tuple) {
+          let #(accordion_id, _) = tuple
+          accordion_id == id
+        })
+
+      let #(id, accordion_model) = accordion
+      let #(new_model, _) = accordion.update(accordion_model, msg)
+
+      #(
+        Model(
+          ..model,
+          accordions_dict: dict.update(model.accordions_dict, id, fn(_) {
+            new_model
+          }),
+        ),
+        effect.none(),
+      )
     }
     CloseToast(toast_id) -> {
       let filtered_toasts =
@@ -236,6 +267,22 @@ pub fn view(model: Model) -> element.Element(Msg) {
       toast.view(type_, CloseToast(id))
     })
 
+  let dependency_map_list = dict.to_list(model.dependency_map)
+  let accordion_dict_list = dict.to_list(model.accordions_dict)
+
+  let accordions =
+    list.map2(
+      accordion_dict_list,
+      dependency_map_list,
+      fn(accordion_pair, map_pair) {
+        let #(id, accordion) = accordion_pair
+        let #(dependency_name, _) = map_pair
+
+        accordion.view(dependency_name, "some body", accordion)
+        |> element.map(fn(msg) { AccordionNClicked(id, msg) })
+      },
+    )
+
   html.div(
     [
       attribute.class(
@@ -244,40 +291,33 @@ pub fn view(model: Model) -> element.Element(Msg) {
     ],
     [
       toast.region(toasts),
-      html.h3([attribute.class("text-2xl font-semibold")], [
+      html.h3([attribute.class("text-2xl font-semibold my-2")], [
         html.text("whats-changed"),
       ]),
-      // html.div([attribute.class("w-96")], [
-      //   accordion.view(model.accordion1)
-      //   |> element.map(Accordion1),
-      // ]),
-      html.textarea(
-        [
-          attribute.class(
-            "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+      html.div([attribute.class("flex h-full flex-row gap-x-4")], [
+        html.div([attribute.class("flex flex-col gap-y-2")], [
+          html.textarea(
+            [
+              attribute.class(
+                "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+              ),
+              event.on_input(OnInputChange),
+              attribute.placeholder("paste package.json here"),
+            ],
+            model.input_value,
           ),
-          event.on_input(OnInputChange),
-          attribute.placeholder("paste package.json here"),
-        ],
-        model.input_value,
-      ),
-      html.button(
-        [
-          attribute.class(
-            "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+          html.button(
+            [
+              attribute.class(
+                "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+              ),
+              event.on_click(OnSubmitClicked),
+            ],
+            [html.text("Submit")],
           ),
-          event.on_click(OnSubmitClicked),
-        ],
-        [html.text("Submit")],
-      ),
-      html.div(
-        [],
-        dict.to_list(model.dependency_map)
-          |> list.map(fn(pair) {
-          let #(name, _) = pair
-          html.div([], [html.text(name)])
-        }),
-      ),
+        ]),
+        html.div([], accordions),
+      ]),
     ],
   )
 }
