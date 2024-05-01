@@ -43,6 +43,21 @@ type AccordionsDict =
 type Toasts =
   List(#(toast.ToastType, String))
 
+type Error {
+  EmptyInput
+  NotValidJson
+}
+
+type JsonDependencies {
+  JsonDependencies(
+    dependencies: JsonDependency,
+    dev_dependencies: JsonDependency,
+  )
+}
+
+type JsonDependency =
+  dict.Dict(String, String)
+
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(
     Model(
@@ -69,7 +84,6 @@ pub type Msg {
   CloseToast(String)
   GotDependencyMapFromLocalStorage(Result(String, Nil))
   GotLastSearchedFromLocalStorage(Result(String, Nil))
-  OnPopoverClicked
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -212,7 +226,6 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       #(Model(..model, toasts: filtered_toasts), effect.none())
     }
-    OnPopoverClicked -> #(Model(..model, is_popover_open: True), effect.none())
   }
 }
 
@@ -230,21 +243,6 @@ fn with_toast(model: Model, toast_type: toast.ToastType, id: String) -> Model {
   let new_toast = #(toast_type, id)
   Model(..model, toasts: list.append(model.toasts, [new_toast]))
 }
-
-type Error {
-  EmptyInput
-  NotValidJson
-}
-
-type JsonDependencies {
-  JsonDependencies(
-    dependencies: JsonDependency,
-    dev_dependencies: JsonDependency,
-  )
-}
-
-type JsonDependency =
-  dict.Dict(String, String)
 
 fn verify_input(
   input_value: String,
