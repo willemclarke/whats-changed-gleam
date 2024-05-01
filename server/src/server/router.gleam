@@ -107,7 +107,7 @@ fn get_external_processed_dependencies(
   let separated_packages =
     dependencies
     |> list.map(npm.get_package_meta)
-    |> separate_packages
+    |> separate_packages()
 
   let processed_dependencies =
     separated_packages.found_packages

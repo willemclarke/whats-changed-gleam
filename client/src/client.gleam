@@ -1,6 +1,7 @@
 import client/api/api
 import client/components/accordion
 import client/components/badge
+import client/components/icon
 import client/components/toast
 import client/local_storage
 import client/timer
@@ -10,6 +11,7 @@ import gleam/dynamic
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/option
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -30,6 +32,8 @@ pub type Model {
     accordions_dict: AccordionsDict,
     input_value: String,
     toasts: Toasts,
+    last_searched: option.Option(String),
+    is_loading: Bool,
   )
 }
 
@@ -46,8 +50,13 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       accordions_dict: dict.new(),
       input_value: "",
       toasts: [],
+      last_searched: option.None,
+      is_loading: False,
     ),
-    local_storage.get_key("dependency_map", GotDependencyMapFromLocalStorage),
+    effect.batch([
+      local_storage.get_key("dependency_map", GotDependencyMapFromLocalStorage),
+      local_storage.get_key("last_searched", GotLastSearchedFromLocalStorage),
+    ]),
   )
 }
 
@@ -59,6 +68,8 @@ pub type Msg {
   AccordionNClicked(String, Bool)
   CloseToast(String)
   GotDependencyMapFromLocalStorage(Result(String, Nil))
+  GotLastSearchedFromLocalStorage(Result(String, Nil))
+  OnPopoverClicked
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -72,10 +83,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           let toast_id = gluid.guidv4()
 
           #(
-            with_toast(
-              model,
-              toast.Success("Processing dependencies"),
-              toast_id,
+            Model(
+              ..with_toast(
+                model,
+                toast.Success("Processing dependencies.."),
+                toast_id,
+              ),
+              is_loading: True,
             ),
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
@@ -118,6 +132,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           ..model,
           dependency_map: dependency_map,
           accordions_dict: set_accordions_dict(dependency_map),
+          is_loading: False,
         ),
         local_storage.set_key(
           "dependency_map",
@@ -147,7 +162,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           #(
             with_toast(
               model,
-              toast.Error("Unable to read value from local storage"),
+              toast.Error("Unable to decode value from local storage"),
               toast_id,
             ),
             effect.none(),
@@ -155,7 +170,14 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         }
       }
     }
-    GotDependencyMapFromLocalStorage(Error(_)) -> {
+    GotDependencyMapFromLocalStorage(Error(_)) -> #(model, effect.none())
+    GotLastSearchedFromLocalStorage(Ok(last_searched)) -> {
+      #(
+        Model(..model, last_searched: option.Some(last_searched)),
+        effect.none(),
+      )
+    }
+    GotLastSearchedFromLocalStorage(Error(_)) -> {
       #(model, effect.none())
     }
     AccordionNClicked(id, is_open) -> {
@@ -190,6 +212,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       #(Model(..model, toasts: filtered_toasts), effect.none())
     }
+    OnPopoverClicked -> #(Model(..model, is_popover_open: True), effect.none())
   }
 }
 
@@ -312,13 +335,13 @@ fn decode_json_dependecies(
 
 pub fn view(model: Model) -> Element(Msg) {
   html.div(
-    [class("flex h-full w-full justify-center items-center flex-col gap-y-4")],
+    [class("flex flex-col p-6 h-screen w-full justify-center items-center")],
     [
       view_toasts(model.toasts),
-      html.h3([class("text-2xl font-semibold my-4")], [
+      html.h3([class("text-2xl font-semibold my-3")], [
         html.text("whats-changed"),
       ]),
-      html.div([class("flex h-full flex-row gap-x-4")], [
+      html.div([class("flex h-full flex-row justify-center gap-x-4")], [
         html.div([class("flex flex-col gap-y-2")], [
           html.textarea(
             [
@@ -340,10 +363,19 @@ pub fn view(model: Model) -> Element(Msg) {
             [html.text("Submit")],
           ),
         ]),
-        html.div(
-          [],
-          view_accordions(model.accordions_dict, model.dependency_map),
-        ),
+        html.div([class("h-2/3 overflow-y-scroll")], case model.is_loading {
+          True -> [
+            html.div(
+              [class("w-[48rem] h-full flex justify-center items-center")],
+              [
+                html.div([class("animate-spin")], [
+                  icon.icon("diamond", icon.Alt("spinner"), icon.Large),
+                ]),
+              ],
+            ),
+          ]
+          False -> view_accordions(model.accordions_dict, model.dependency_map)
+        }),
       ]),
     ],
   )

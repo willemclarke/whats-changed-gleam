@@ -1,14 +1,14 @@
 import common
-import server/error
 import gleam/dynamic.{type Dynamic}
 import gleam/http.{Get}
-import gleam/httpc
 import gleam/http/request
 import gleam/http/response
+import gleam/httpc
 import gleam/json
-import gleam/string
 import gleam/list
 import gleam/result
+import gleam/string
+import server/error
 
 // what we get back from npm api 
 pub type NpmPackage {

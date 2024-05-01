@@ -39,7 +39,7 @@ fn view_toast(
               attribute.class("bg-transparent rounded-md inline-flex"),
               event.on_click(on_close),
             ],
-            [icon.icon("x-circle-fill", icon.Alt("close-toast"))],
+            [icon.icon("x-circle-fill", icon.Alt("close-toast"), icon.Small)],
           ),
         ]),
       ]),
