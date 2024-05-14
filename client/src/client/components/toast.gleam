@@ -51,7 +51,7 @@ pub fn region(toasts: List(Element(msg))) -> Element(msg) {
   html.div(
     [
       attribute.class(
-        "z-10 fixed inset-0 flex items-start px-4 py-6 pointer-events-none",
+        "z-10 fixed inset-0 flex items-end px-4 py-6 pointer-events-none",
       ),
     ],
     [

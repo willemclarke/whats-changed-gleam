@@ -9,12 +9,14 @@ pub type AltText {
 
 pub type Size {
   Small
+  Medium
   Large
 }
 
 fn size_to_value(size: Size) -> String {
   case size {
     Large -> "2rem"
+    Medium -> "1.5rem"
     Small -> "1rem"
   }
 }

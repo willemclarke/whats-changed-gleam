@@ -3,6 +3,7 @@ import client/components/accordion
 import client/components/badge
 import client/components/icon
 import client/components/toast
+import client/html_extra
 import client/local_storage
 import client/timer
 import common
@@ -34,6 +35,7 @@ pub type Model {
     toasts: Toasts,
     last_searched: option.Option(String),
     is_loading: Bool,
+    is_input_hidden: Bool,
   )
 }
 
@@ -66,6 +68,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       input_value: "",
       toasts: [],
       last_searched: option.None,
+      is_input_hidden: False,
       is_loading: False,
     ),
     effect.batch([
@@ -84,6 +87,7 @@ pub type Msg {
   CloseToast(String)
   GotDependencyMapFromLocalStorage(Result(String, Nil))
   GotLastSearchedFromLocalStorage(Result(String, Nil))
+  OnSearchAgainClicked
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -147,6 +151,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           dependency_map: dependency_map,
           accordions_dict: set_accordions_dict(dependency_map),
           is_loading: False,
+          is_input_hidden: True,
         ),
         local_storage.set_key(
           "dependency_map",
@@ -167,6 +172,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
               ..model,
               dependency_map: dependency_map,
               accordions_dict: set_accordions_dict(dependency_map),
+              is_input_hidden: True,
             ),
             effect.none(),
           )
@@ -219,6 +225,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         ),
         effect.none(),
       )
+    }
+    OnSearchAgainClicked -> {
+      #(Model(..model, is_input_hidden: False), effect.none())
     }
     CloseToast(toast_id) -> {
       let filtered_toasts =
@@ -336,35 +345,64 @@ pub fn view(model: Model) -> Element(Msg) {
     [class("flex flex-col p-6 h-screen w-full justify-center items-center")],
     [
       view_toasts(model.toasts),
-      html.h3([class("text-2xl font-semibold my-3")], [
-        html.text("whats-changed"),
-      ]),
-      html.div([class("flex h-full flex-row justify-center gap-x-4")], [
-        html.div([class("flex flex-col gap-y-2")], [
-          html.textarea(
-            [
-              class(
-                "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
-              ),
-              event.on_input(OnInputChange),
-              attribute.placeholder("paste package.json here"),
-            ],
-            model.input_value,
-          ),
-          html.button(
-            [
-              class(
-                "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
-              ),
-              event.on_click(OnSubmitClicked),
-            ],
-            [html.text("Submit")],
-          ),
+      html.div([class("flex gap-x-2 items-center")], [
+        html.h3([class("text-2xl font-semibold my-3")], [
+          html.text("whats-changed"),
         ]),
-        html.div([class("h-2/3 overflow-y-scroll")], case model.is_loading {
+        html.a(
+          [
+            attribute.href(
+              "https://github.com/willemclarke/whats-changed-gleam",
+            ),
+            attribute.target("_blank"),
+          ],
+          [icon.icon("github", icon.Alt("repo"), icon.Medium)],
+        ),
+      ]),
+      html_extra.view_if(
+        is_true: model.is_input_hidden,
+        display: html.button(
+          [
+            event.on_click(OnSearchAgainClicked),
+            class(
+              "my-2 px-3 py-2 text-xs bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+            ),
+          ],
+          [html.text("Search again")],
+        ),
+      ),
+      html.div([class("flex h-full flex-row justify-center gap-x-4 ")], [
+        html.div([class("flex flex-col gap-y-2")], [
+          case model.is_input_hidden {
+            True -> html.text("")
+            False ->
+              html.div([class("h-full flex flex-col")], [
+                html.textarea(
+                  [
+                    class(
+                      "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+                    ),
+                    event.on_input(OnInputChange),
+                    attribute.placeholder("paste package.json here"),
+                  ],
+                  model.input_value,
+                ),
+                html.button(
+                  [
+                    class(
+                      "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+                    ),
+                    event.on_click(OnSubmitClicked),
+                  ],
+                  [html.text("Submit")],
+                ),
+              ])
+          },
+        ]),
+        html.div([class("h-2/3 overflow-y-auto")], case model.is_loading {
           True -> [
             html.div(
-              [class("w-[48rem] h-full flex justify-center items-center")],
+              [class("w-[53rem] h-full flex justify-center items-center")],
               [
                 html.div([class("animate-spin")], [
                   icon.icon("diamond", icon.Alt("spinner"), icon.Large),
