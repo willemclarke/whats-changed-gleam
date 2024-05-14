@@ -201,9 +201,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(model, effect.none())
     }
     AccordionNClicked(id, is_open) -> {
-      // when a given accordion is clicked, we need to update that accordion
-      // inside the dict so that it has the new state/model for that given accordion (opening or
-      // closing it)
+      // when a given accordion is clicked, we need to set the `is_open` field
+      // for that id in the dict to be open/closed
       let assert Ok(accordion) =
         model.accordions_dict
         |> dict.to_list()
@@ -238,9 +237,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
-// when we get the dependency_map back from either BE or localstorage, 
+// when we get the dependency_map back from either backend or localstorage, 
 // we need to initialise N accordion models for each dependency we get back, 
-// so if 10 keys we will get 10 models
+// so if 10 keys we will get 10 dict items
 fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
   dependency_map
   |> dict.keys()
@@ -345,73 +344,11 @@ pub fn view(model: Model) -> Element(Msg) {
     [class("flex flex-col p-6 h-screen w-full justify-center items-center")],
     [
       view_toasts(model.toasts),
-      html.div([class("flex gap-x-2 items-center")], [
-        html.h3([class("text-2xl font-semibold my-3")], [
-          html.text("whats-changed"),
-        ]),
-        html.a(
-          [
-            attribute.href(
-              "https://github.com/willemclarke/whats-changed-gleam",
-            ),
-            attribute.target("_blank"),
-          ],
-          [icon.icon("github", icon.Alt("repo"), icon.Medium)],
-        ),
-      ]),
-      html_extra.view_if(
-        is_true: model.is_input_hidden,
-        display: html.button(
-          [
-            event.on_click(OnSearchAgainClicked),
-            class(
-              "my-2 px-3 py-2 text-xs bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
-            ),
-          ],
-          [html.text("Search again")],
-        ),
-      ),
+      view_header(),
+      view_search_again_button(model.is_input_hidden),
       html.div([class("flex h-full flex-row justify-center gap-x-4 ")], [
-        html.div([class("flex flex-col gap-y-2")], [
-          case model.is_input_hidden {
-            True -> html.text("")
-            False ->
-              html.div([class("h-full flex flex-col")], [
-                html.textarea(
-                  [
-                    class(
-                      "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
-                    ),
-                    event.on_input(OnInputChange),
-                    attribute.placeholder("paste package.json here"),
-                  ],
-                  model.input_value,
-                ),
-                html.button(
-                  [
-                    class(
-                      "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
-                    ),
-                    event.on_click(OnSubmitClicked),
-                  ],
-                  [html.text("Submit")],
-                ),
-              ])
-          },
-        ]),
-        html.div([class("h-2/3 overflow-y-auto")], case model.is_loading {
-          True -> [
-            html.div(
-              [class("w-[53rem] h-full flex justify-center items-center")],
-              [
-                html.div([class("animate-spin")], [
-                  icon.icon("diamond", icon.Alt("spinner"), icon.Large),
-                ]),
-              ],
-            ),
-          ]
-          False -> view_accordions(model.accordions_dict, model.dependency_map)
-        }),
+        view_package_json_input(model),
+        view_releases(model),
       ]),
     ],
   )
@@ -427,7 +364,80 @@ fn view_toasts(toasts: Toasts) {
   |> toast.region()
 }
 
-fn view_accordions(
+fn view_header() -> Element(msg) {
+  html.div([class("flex gap-x-2 items-center")], [
+    html.h3([class("text-2xl font-semibold my-3")], [html.text("whats-changed")]),
+    html.a(
+      [
+        attribute.href("https://github.com/willemclarke/whats-changed-gleam"),
+        attribute.target("_blank"),
+      ],
+      [icon.icon("github", icon.Alt("repo"), icon.Medium)],
+    ),
+  ])
+}
+
+fn view_search_again_button(is_input_hidden: Bool) -> Element(Msg) {
+  html_extra.view_if(
+    is_true: is_input_hidden,
+    display: html.button(
+      [
+        event.on_click(OnSearchAgainClicked),
+        class(
+          "my-2 px-3 py-2 text-xs bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+        ),
+      ],
+      [html.text("Search again")],
+    ),
+  )
+}
+
+fn view_package_json_input(model: Model) -> Element(Msg) {
+  html.div([class("flex flex-col gap-y-2")], [
+    case model.is_input_hidden {
+      True -> html.text("")
+      False ->
+        html.div([class("h-full flex flex-col")], [
+          html.textarea(
+            [
+              class(
+                "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+              ),
+              event.on_input(OnInputChange),
+              attribute.placeholder("paste package.json here"),
+            ],
+            model.input_value,
+          ),
+          html.button(
+            [
+              class(
+                "py-2 px-4 bg-black text-white shadow hover:shadow-md focus:ring focus:ring-slate-300 rounded-md transition ease-in-out hover:-translate-y-0.5 duration-300",
+              ),
+              event.on_click(OnSubmitClicked),
+            ],
+            [html.text("Submit")],
+          ),
+        ])
+    },
+  ])
+}
+
+fn view_releases(model: Model) -> Element(Msg) {
+  html.div([class("h-2/3 overflow-y-auto")], case model.is_loading {
+    True -> [
+      html.div([class("w-[53rem] h-full flex justify-center items-center")], [
+        html.div([class("animate-spin")], [
+          icon.icon("diamond", icon.Alt("spinner"), icon.Large),
+        ]),
+      ]),
+    ]
+
+    False ->
+      view_release_accordions(model.accordions_dict, model.dependency_map)
+  })
+}
+
+fn view_release_accordions(
   accordions_dict: AccordionsDict,
   dependency_map: common.DependencyMap,
 ) -> List(Element(Msg)) {
