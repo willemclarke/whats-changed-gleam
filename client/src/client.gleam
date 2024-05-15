@@ -2,6 +2,7 @@ import client/api/api
 import client/components/accordion
 import client/components/badge
 import client/components/icon
+import client/components/popover
 import client/components/toast
 import client/html_extra
 import client/local_storage
@@ -162,9 +163,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     GotDependencyMap(Error(_)) -> {
       #(model, effect.none())
     }
+
     GotDependencyMapFromLocalStorage(Ok(string)) -> {
       let decoded = json.decode(string, common.decode_dependency_map)
-
       case decoded {
         Ok(dependency_map) -> {
           #(
@@ -201,26 +202,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(model, effect.none())
     }
     AccordionNClicked(id, is_open) -> {
-      // when a given accordion is clicked, we need to set the `is_open` field
-      // for that id in the dict to be open/closed
-      let assert Ok(accordion) =
-        model.accordions_dict
-        |> dict.to_list()
-        |> list.find(fn(tuple) {
-          let #(accordion_id, _) = tuple
-          accordion_id == id
-        })
-
-      let accordion_id = pair.first(accordion)
-
       #(
         Model(
           ..model,
-          accordions_dict: dict.update(
-            model.accordions_dict,
-            accordion_id,
-            fn(_) { !is_open },
-          ),
+          accordions_dict: dict.insert(model.accordions_dict, id, !is_open),
         ),
         effect.none(),
       )
@@ -401,7 +386,7 @@ fn view_package_json_input(model: Model) -> Element(Msg) {
           html.textarea(
             [
               class(
-                "h-2/3 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+                "h-4/5 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
               ),
               event.on_input(OnInputChange),
               attribute.placeholder("paste package.json here"),
@@ -423,7 +408,7 @@ fn view_package_json_input(model: Model) -> Element(Msg) {
 }
 
 fn view_releases(model: Model) -> Element(Msg) {
-  html.div([class("h-2/3 overflow-y-auto")], case model.is_loading {
+  html.div([class("h-4/5 overflow-y-auto")], case model.is_loading {
     True -> [
       html.div([class("w-[53rem] h-full flex justify-center items-center")], [
         html.div([class("animate-spin")], [
@@ -496,31 +481,48 @@ fn view_processed_dependency(
   processed_dependency: common.ProcessedDependency,
 ) -> Element(msg) {
   case processed_dependency {
-    common.HasReleases(_, _, releases) -> {
-      html.div(
-        [class("flex flex-col gap-y-2")],
-        list.map(releases, fn(release) {
-          html.div([class("flex flex-row gap-x-2 w-full")], [
-            badge.view(release.tag_name),
-            html.a(
-              [
-                attribute.href(release.url),
-                attribute.target("_blank"),
-                class("hover:underline"),
-              ],
-              [html.text(release.url)],
-            ),
-          ])
-        }),
-      )
-    }
-    common.NotFound(_, _) -> {
-      html.p([], [html.text("Not found")])
-    }
-    common.NoReleases(_, _) -> {
-      html.p([], [html.text("Up to date")])
-    }
+    common.HasReleases(_, _, releases) -> view_has_releases(releases)
+    common.NotFound(_, _) -> html.p([], [html.text("Not found")])
+    common.NoReleases(_, _) -> html.p([], [html.text("Up to date")])
   }
+}
+
+fn view_has_releases(releases: List(common.Release)) -> Element(msg) {
+  html.div(
+    [class("flex flex-col gap-y-2")],
+    list.map(releases, fn(release) {
+      html.div([class("flex flex-row gap-x-2 w-full")], [
+        badge.view(release.tag_name),
+        case release.body {
+          option.None -> release_url(release.url)
+
+          option.Some(release_body) -> {
+            popover.view(popover.Props(
+              trigger: [release_url(release.url)],
+              content: html.div([class("rounded-md p-2 h-84 z-[99999]")], [
+                html.div(
+                  [
+                    attribute.attribute(
+                      "dangerous-unescaped-html",
+                      release_body,
+                    ),
+                  ],
+                  [],
+                ),
+              ]),
+            ))
+          }
+        },
+      ])
+    }),
+  )
+}
+
+fn release_url(url: String) -> Element(msg) {
+  html.a(
+    [attribute.href(url), attribute.target("_blank"), class("hover:underline")],
+    [html.text(url)],
+  )
 }
 
 // -- Main --

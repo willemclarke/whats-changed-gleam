@@ -53,6 +53,7 @@ pub type Release {
     dependency_name: String,
     name: Option(String),
     url: String,
+    body: Option(String),
     created_at: String,
     version: String,
   )
@@ -180,12 +181,13 @@ fn decode_has_releases() -> fn(dynamic.Dynamic) ->
 }
 
 fn decode_releases(json: dynamic.Dynamic) {
-  dynamic.list(of: dynamic.decode6(
+  dynamic.list(of: dynamic.decode7(
     Release,
     dynamic.field("tag_name", dynamic.string),
     dynamic.field("dependency_name", dynamic.string),
     dynamic.field("name", dynamic.optional(dynamic.string)),
     dynamic.field("url", dynamic.string),
+    dynamic.field("body", dynamic.optional(dynamic.string)),
     dynamic.field("created_at", dynamic.string),
     dynamic.field("version", dynamic.string),
   ))(json)
@@ -254,6 +256,7 @@ fn encode_releases(releases: List(Release)) -> json.Json {
       #("url", json.string(release.url)),
       #("created_at", json.string(release.created_at)),
       #("version", json.string(release.version)),
+      #("body", json.nullable(release.body, json.string)),
     ])
   })
 }
