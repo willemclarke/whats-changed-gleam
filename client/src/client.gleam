@@ -99,20 +99,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       case verified {
         Ok(client_dependencies) -> {
-          let toast_id = gluid.guidv4()
+          let toast = #(
+            toast.Success("Processing dependencies.."),
+            gluid.guidv4(),
+          )
 
           #(
-            Model(
-              ..with_toast(
-                model,
-                toast.Success("Processing dependencies.."),
-                toast_id,
-              ),
-              is_loading: True,
-            ),
+            Model(..with_toast(toast, model), is_loading: True),
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
-              timer.after(3000, CloseToast(toast_id)),
+              timer.after(3000, CloseToast(pair.second(toast))),
               local_storage.set_key("last_searched", model.input_value),
             ]),
           )
@@ -120,25 +116,24 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         Error(error) -> {
           case error {
             EmptyInput -> {
-              let toast_id = gluid.guidv4()
+              let toast = #(
+                toast.Error("Input cannot be empty"),
+                gluid.guidv4(),
+              )
+
               #(
-                with_toast(
-                  model,
-                  toast.Error("Input cannot be empty"),
-                  toast_id,
-                ),
-                timer.after(3000, CloseToast(toast_id)),
+                with_toast(toast, model),
+                timer.after(3000, CloseToast(pair.second(toast))),
               )
             }
             NotValidJson -> {
-              let toast_id = gluid.guidv4()
+              let toast = #(
+                toast.Error("Please provide valid json"),
+                gluid.guidv4(),
+              )
               #(
-                with_toast(
-                  model,
-                  toast.Error("Please provide valid json"),
-                  toast_id,
-                ),
-                timer.after(3000, CloseToast(toast_id)),
+                with_toast(toast, model),
+                timer.after(3000, CloseToast(pair.second(toast))),
               )
             }
           }
@@ -179,14 +174,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           )
         }
         Error(_) -> {
-          let toast_id = gluid.guidv4()
+          let toast = #(
+            toast.Error("Unable to decode value from local storage"),
+            gluid.guidv4(),
+          )
           #(
-            with_toast(
-              model,
-              toast.Error("Unable to decode value from local storage"),
-              toast_id,
-            ),
-            effect.none(),
+            with_toast(toast, model),
+            timer.after(3000, CloseToast(pair.second(toast))),
           )
         }
       }
@@ -232,9 +226,8 @@ fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
   })
 }
 
-fn with_toast(model: Model, toast_type: toast.ToastType, id: String) -> Model {
-  let new_toast = #(toast_type, id)
-  Model(..model, toasts: list.append(model.toasts, [new_toast]))
+fn with_toast(toast: #(toast.ToastType, String), model: Model) -> Model {
+  Model(..model, toasts: [toast, ..model.toasts])
 }
 
 fn verify_input(
