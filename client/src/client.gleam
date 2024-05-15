@@ -223,13 +223,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 }
 
 // when we get the dependency_map back from either backend or localstorage, 
-// we need to initialise N accordion models for each dependency we get back, 
-// so if 10 keys we will get 10 dict items
+// we need to initialise N accordion (uuid, bool) for each dependency we get back, 
+// so if 10 keys we will get 10 dict states
 fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
   dependency_map
-  |> dict.keys()
-  |> list.map(fn(_) { #(gluid.guidv4(), False) })
-  |> dict.from_list
+  |> dict.fold(dict.new(), fn(acc, _, _) {
+    dict.insert(acc, gluid.guidv4(), False)
+  })
 }
 
 fn with_toast(model: Model, toast_type: toast.ToastType, id: String) -> Model {
