@@ -4,6 +4,7 @@ import gleam/list
 import gleam/option.{type Option}
 import gleam/result
 import gluid
+import kirala/bbmarkdown/html_renderer
 import server/error
 import sqlight
 
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS releases (
   dependency_name TEXT NOT NULL,
   version TEXT NOT NULL,
   url TEXT NOT NULL,
+  body TEXT,
   created DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
   UNIQUE (dependency_name, version)
 );
@@ -41,6 +43,7 @@ pub type DbRelease {
     dependency_name: String,
     version: String,
     url: String,
+    body: Option(String),
     created_at: String,
   )
 }
@@ -77,8 +80,8 @@ pub fn insert_release(
 ) -> Result(Nil, error.Error) {
   let query =
     "
-    INSERT INTO releases (id, name, tag_name, dependency_name, version, url)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO releases (id, name, tag_name, dependency_name, version, url, body)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (dependency_name, version) DO NOTHING
   "
 
@@ -89,6 +92,7 @@ pub fn insert_release(
     sqlight.text(release.dependency_name),
     sqlight.text(release.version),
     sqlight.text(release.url),
+    sqlight.nullable(sqlight.text, release.body),
   ]
 
   sqlight.query(query, on: db.inner, with: parameters, expecting: Ok)
@@ -99,11 +103,14 @@ pub fn insert_release(
 pub fn from_db_releases(db_releases: List(DbRelease)) -> List(common.Release) {
   db_releases
   |> list.map(fn(db_release) {
+    let html_body = html_renderer.convert(option.unwrap(db_release.body, ""))
+
     common.Release(
       tag_name: db_release.tag_name,
       dependency_name: db_release.dependency_name,
       name: db_release.name,
       url: db_release.url,
+      body: option.Some(html_body),
       version: db_release.version,
       created_at: db_release.created_at,
     )
@@ -113,7 +120,7 @@ pub fn from_db_releases(db_releases: List(DbRelease)) -> List(common.Release) {
 fn decode_db_release(
   data: dynamic.Dynamic,
 ) -> Result(DbRelease, List(dynamic.DecodeError)) {
-  dynamic.decode7(
+  dynamic.decode8(
     DbRelease,
     dynamic.element(0, dynamic.string),
     dynamic.element(1, dynamic.optional(dynamic.string)),
@@ -121,6 +128,7 @@ fn decode_db_release(
     dynamic.element(3, dynamic.string),
     dynamic.element(4, dynamic.string),
     dynamic.element(5, dynamic.string),
-    dynamic.element(6, dynamic.string),
+    dynamic.element(6, dynamic.optional(dynamic.string)),
+    dynamic.element(7, dynamic.string),
   )(data)
 }

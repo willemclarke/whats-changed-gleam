@@ -12,6 +12,7 @@ import gleam/regex
 import gleam/result
 import gleam/string
 import gleam/string_builder.{type StringBuilder}
+import kirala/bbmarkdown/html_renderer
 import server/error
 import server/npm
 import server/verl
@@ -25,6 +26,7 @@ pub type GithubRelease {
     html_url: String,
     prerelease: Bool,
     draft: Bool,
+    body: Option(String),
     dependency_name: Option(String),
   )
 }
@@ -224,6 +226,7 @@ fn from_github_releases(
 ) -> List(common.Release) {
   list.map(github_releases, fn(release) {
     let assert Ok(version) = version_from_tag_name(release.tag_name)
+    let html_body = html_renderer.convert(option.unwrap(release.body, ""))
 
     common.Release(
       tag_name: release.tag_name,
@@ -232,6 +235,7 @@ fn from_github_releases(
       created_at: release.created_at,
       url: release.html_url,
       version: version,
+      body: option.Some(html_body),
     )
   })
 }
@@ -317,7 +321,7 @@ pub fn encode_releases(releases: List(common.Release)) -> StringBuilder {
 fn decode_github_releases() -> fn(Dynamic) ->
   Result(List(GithubRelease), List(dynamic.DecodeError)) {
   let release_decoder =
-    dynamic.decode7(
+    dynamic.decode8(
       GithubRelease,
       dynamic.field("tag_name", dynamic.string),
       dynamic.field("name", dynamic.optional(dynamic.string)),
@@ -325,6 +329,7 @@ fn decode_github_releases() -> fn(Dynamic) ->
       dynamic.field("html_url", dynamic.string),
       dynamic.field("prerelease", dynamic.bool),
       dynamic.field("draft", dynamic.bool),
+      dynamic.field("body", dynamic.optional(dynamic.string)),
       dynamic.optional_field("dependency_name", dynamic.string),
     )
 

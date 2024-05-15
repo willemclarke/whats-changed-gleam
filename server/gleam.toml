@@ -25,7 +25,7 @@ verl = "~> 1.1"
 dot_env = "~> 0.3"
 sqlight = "~> 0.9"
 gluid = "~> 1.0"
-
+kirala_bbmarkdown = ">= 1.0.2 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"

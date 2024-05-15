@@ -21,6 +21,7 @@ packages = [
   { name = "glint", version = "0.14.0", build_tools = ["gleam"], requirements = ["gleam_community_ansi", "gleam_community_colour", "gleam_stdlib", "snag"], otp_app = "glint", source = "hex", outer_checksum = "21AB16D5A50D4EF34DF935915FDBEE06B2DAEDEE3FCC8584C6E635A866566B38" },
   { name = "glisten", version = "0.11.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "glisten", source = "hex", outer_checksum = "73BC09C8487C2FFC0963BFAB33ED2F0D636FDFA43B966E65C1251CBAB8458099" },
   { name = "gluid", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gluid", source = "hex", outer_checksum = "9C0D64DC9A345B7DCC76A2EFDC1F3479E3C6A08A1FB81156E9CCED959F8DEB78" },
+  { name = "kirala_bbmarkdown", version = "1.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "kirala_bbmarkdown", source = "hex", outer_checksum = "E4D9E1AB63CA1CC8109E5B21A0344CCF66BDA44727C6441DA1D84D6A86F35AE7" },
   { name = "logging", version = "1.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "82C112ED9B6C30C1772A6FE2613B94B13F62EA35F5869A2630D13948D297BD39" },
   { name = "lustre", version = "3.1.4", build_tools = ["gleam"], requirements = ["argv", "gleam_community_ansi", "gleam_stdlib", "glint"], otp_app = "lustre", source = "hex", outer_checksum = "E651E39189F55473837FB7386C06BAED7276B37B5058302CAC880F89C25CB4E9" },
   { name = "marceau", version = "1.1.0", build_tools = ["gleam"], requirements = [], otp_app = "marceau", source = "hex", outer_checksum = "1AAD727A30BE0F95562C3403BB9B27C823797AD90037714255EEBF617B1CDA81" },
@@ -42,7 +43,8 @@ gleam_httpc = { version = "~> 2.2" }
 gleam_json = { version = "~> 1.0" }
 gleam_stdlib = { version = "~> 0.36.0" }
 gleeunit = { version = "~> 1.0" }
-gluid = { version = "~> 1.0"}
+gluid = { version = "~> 1.0" }
+kirala_bbmarkdown = { version = ">= 1.0.2 and < 2.0.0"}
 lustre = { version = "~> 3.1" }
 mist = { version = "~> 0.17" }
 snag = { version = "~> 0.3" }
