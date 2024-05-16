@@ -37,7 +37,7 @@ pub type Model {
     last_searched: option.Option(String),
     is_loading: Bool,
     is_input_hidden: Bool,
-    dependency_filter_input_value: String,
+    search_term: String,
   )
 }
 
@@ -72,7 +72,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       last_searched: option.None,
       is_input_hidden: False,
       is_loading: False,
-      dependency_filter_input_value: "",
+      search_term: "",
     ),
     effect.batch([
       local_storage.get_key("dependency_map", GotDependencyMapFromLocalStorage),
@@ -107,22 +107,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       // if the size of the dict > 0 and the search_term is "", it means we've filtered
       // the set of results, but backspaced, so we want to show the original unfiltered set of data.
       // otherwise, do nothing  
-      let effect = case dict.size(filtered_accordions), search_term {
-        _, "" ->
-          local_storage.get_key(
-            "dependency_map",
-            GotDependencyMapFromLocalStorage,
-          )
-        _, _ -> effect.none()
+      let accordions_test = case dict.size(filtered_accordions), search_term {
+        _, "" -> set_accordions_dict(model.dependency_map)
+        _, _ -> filtered_accordions
       }
 
       #(
         Model(
           ..model,
-          dependency_filter_input_value: search_term,
-          accordions_dict: filtered_accordions,
+          search_term: search_term,
+          accordions_dict: accordions_test,
         ),
-        effect.batch([effect]),
+        effect.none(),
       )
     }
     OnSubmitClicked -> {
@@ -136,7 +132,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           )
 
           #(
-            Model(..with_toast(toast, model), is_loading: True),
+            Model(
+              ..with_toast(toast, model),
+              dependency_map: dict.new(),
+              accordions_dict: dict.new(),
+              is_loading: True,
+              is_input_hidden: True,
+            ),
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
               local_storage.set_key("last_searched", model.input_value),
@@ -394,20 +396,14 @@ fn view_header() -> Element(msg) {
 }
 
 fn view_controls(model: Model) -> Element(Msg) {
-  html.div([class("flex gap-x-2 items-center")], [
-    view_search_again_button(model.is_input_hidden),
-    case dict.size(model.dependency_map) {
-      0 -> html.text("")
-      _ ->
-        html.input([
-          class(
-            "my-2 p-1 px-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
-          ),
-          event.on_input(OnSearchDependenciesInputChanged),
-          attribute.placeholder("Filter here"),
-        ])
-    },
-  ])
+  case dict.size(model.dependency_map) {
+    0 -> html.text("")
+    _ ->
+      html.div([class("flex gap-x-2 items-center")], [
+        view_search_again_button(model.is_input_hidden),
+        view_filter_input(),
+      ])
+  }
 }
 
 fn view_search_again_button(is_input_hidden: Bool) -> Element(Msg) {
@@ -423,6 +419,16 @@ fn view_search_again_button(is_input_hidden: Bool) -> Element(Msg) {
       [html.text("Search again")],
     ),
   )
+}
+
+fn view_filter_input() -> Element(Msg) {
+  html.input([
+    class(
+      "my-2 p-1 px-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+    ),
+    event.on_input(OnSearchDependenciesInputChanged),
+    attribute.placeholder("Filter here"),
+  ])
 }
 
 fn view_package_json_input(model: Model) -> Element(Msg) {
