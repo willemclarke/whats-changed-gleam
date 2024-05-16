@@ -12,7 +12,7 @@ pub type Config(msg) {
 pub fn view(config: Config(msg)) {
   let aria_hidden = bool.guard(config.is_open, "false", fn() { "true" })
 
-  html.div([class("w-[52rem]"), event.on_click(config.on_click)], [
+  html.div([class("w-[62rem]"), event.on_click(config.on_click)], [
     html.h2([], [
       html.button(
         [
@@ -29,7 +29,7 @@ pub fn view(config: Config(msg)) {
       display: html.div(
         [
           class(
-            "max-h-62 flex-1 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
+            "max-h-96 flex-1 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
           ),
         ],
         [config.body],

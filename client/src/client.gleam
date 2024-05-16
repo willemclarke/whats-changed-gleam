@@ -37,6 +37,7 @@ pub type Model {
     last_searched: option.Option(String),
     is_loading: Bool,
     is_input_hidden: Bool,
+    dependency_filter_input_value: String,
   )
 }
 
@@ -71,6 +72,7 @@ fn init(_flags) -> #(Model, effect.Effect(Msg)) {
       last_searched: option.None,
       is_input_hidden: False,
       is_loading: False,
+      dependency_filter_input_value: "",
     ),
     effect.batch([
       local_storage.get_key("dependency_map", GotDependencyMapFromLocalStorage),
@@ -89,11 +91,40 @@ pub type Msg {
   GotDependencyMapFromLocalStorage(Result(String, Nil))
   GotLastSearchedFromLocalStorage(Result(String, Nil))
   OnSearchAgainClicked
+  OnSearchDependenciesInputChanged(String)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
     OnInputChange(value) -> #(Model(..model, input_value: value), effect.none())
+    OnSearchDependenciesInputChanged(search_term) -> {
+      let filtered_accordions =
+        model.accordions_dict
+        |> dict.filter(fn(dependency_name, _) {
+          string.contains(dependency_name, search_term)
+        })
+
+      // if the size of the dict > 0 and the search_term is "", it means we've filtered
+      // the set of results, but backspaced, so we want to show the original unfiltered set of data.
+      // otherwise, do nothing  
+      let effect = case dict.size(filtered_accordions), search_term {
+        _, "" ->
+          local_storage.get_key(
+            "dependency_map",
+            GotDependencyMapFromLocalStorage,
+          )
+        _, _ -> effect.none()
+      }
+
+      #(
+        Model(
+          ..model,
+          dependency_filter_input_value: search_term,
+          accordions_dict: filtered_accordions,
+        ),
+        effect.batch([effect]),
+      )
+    }
     OnSubmitClicked -> {
       let verified = verify_input(model.input_value)
 
@@ -108,7 +139,6 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             Model(..with_toast(toast, model), is_loading: True),
             effect.batch([
               api.process_dependencies(GotDependencyMap, client_dependencies),
-              timer.after(3000, CloseToast(pair.second(toast))),
               local_storage.set_key("last_searched", model.input_value),
             ]),
           )
@@ -148,6 +178,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
           accordions_dict: set_accordions_dict(dependency_map),
           is_loading: False,
           is_input_hidden: True,
+          toasts: [],
         ),
         local_storage.set_key(
           "dependency_map",
@@ -186,7 +217,16 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       }
     }
     GotDependencyMapFromLocalStorage(Error(_)) -> #(model, effect.none())
+
     GotLastSearchedFromLocalStorage(Ok(last_searched)) -> {
+      let decoded = json.decode(last_searched, dynamic.string)
+      case decoded {
+        Ok(json) -> #(
+          Model(..model, last_searched: option.Some(json)),
+          effect.none(),
+        )
+        Error(_) -> #(model, effect.none())
+      }
       #(
         Model(..model, last_searched: option.Some(last_searched)),
         effect.none(),
@@ -217,13 +257,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 }
 
 // when we get the dependency_map back from either backend or localstorage, 
-// we need to initialise N accordion (uuid, bool) for each dependency we get back, 
+// we need to initialise N accordion (dependency_name, bool) for each dependency we get back, 
 // so if 10 keys we will get 10 dict states
 fn set_accordions_dict(dependency_map: common.DependencyMap) -> AccordionsDict {
   dependency_map
-  |> dict.fold(dict.new(), fn(acc, _, _) {
-    dict.insert(acc, gluid.guidv4(), False)
-  })
+  |> dict.fold(dict.new(), fn(acc, name, _) { dict.insert(acc, name, False) })
 }
 
 fn with_toast(toast: #(toast.ToastType, String), model: Model) -> Model {
@@ -323,7 +361,7 @@ pub fn view(model: Model) -> Element(Msg) {
     [
       view_toasts(model.toasts),
       view_header(),
-      view_search_again_button(model.is_input_hidden),
+      view_controls(model),
       html.div([class("flex h-full flex-row justify-center gap-x-4 ")], [
         view_package_json_input(model),
         view_releases(model),
@@ -355,6 +393,23 @@ fn view_header() -> Element(msg) {
   ])
 }
 
+fn view_controls(model: Model) -> Element(Msg) {
+  html.div([class("flex gap-x-2 items-center")], [
+    view_search_again_button(model.is_input_hidden),
+    case dict.size(model.dependency_map) {
+      0 -> html.text("")
+      _ ->
+        html.input([
+          class(
+            "my-2 p-1 px-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+          ),
+          event.on_input(OnSearchDependenciesInputChanged),
+          attribute.placeholder("Filter here"),
+        ])
+    },
+  ])
+}
+
 fn view_search_again_button(is_input_hidden: Bool) -> Element(Msg) {
   html_extra.view_if(
     is_true: is_input_hidden,
@@ -379,7 +434,7 @@ fn view_package_json_input(model: Model) -> Element(Msg) {
           html.textarea(
             [
               class(
-                "h-4/5 w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
+                "min-h-[36rem] max-h-[36rem] w-80 p-2 border border-gray-300 rounded-lg hover:border-gray-500 focus:border-gray-700 focus:outline-0 focus:ring focus:ring-slate-300",
               ),
               event.on_input(OnInputChange),
               attribute.placeholder("paste package.json here"),
@@ -401,9 +456,11 @@ fn view_package_json_input(model: Model) -> Element(Msg) {
 }
 
 fn view_releases(model: Model) -> Element(Msg) {
-  html.div([class("h-4/5 overflow-y-auto")], case model.is_loading {
+  html.div([class("min-h-[36rem] max-h-[36rem] overflow-y-auto")], case
+    model.is_loading
+  {
     True -> [
-      html.div([class("w-[53rem] h-full flex justify-center items-center")], [
+      html.div([class("w-[62rem] h-full flex justify-center items-center")], [
         html.div([class("animate-spin")], [
           icon.icon("diamond", icon.Alt("spinner"), icon.Large),
         ]),
@@ -420,22 +477,22 @@ fn view_release_accordions(
   dependency_map: common.DependencyMap,
 ) -> List(Element(Msg)) {
   let accordions_dict_list = dict.to_list(accordions_dict)
-  let dependency_map_list = dict.to_list(dependency_map)
+  use accordion_pair <- list.map(accordions_dict_list)
 
-  use accordion_pair, map_pair <- list.map2(
-    accordions_dict_list,
-    dependency_map_list,
-  )
+  let #(dep_name, is_open) = accordion_pair
+  let lookup_processed_dep = dict.get(dependency_map, dep_name)
 
-  let #(id, is_open) = accordion_pair
-  let #(_, processed_dependency) = map_pair
-
-  accordion.view(accordion.Config(
-    title: accordion_title(processed_dependency),
-    body: view_processed_dependency(processed_dependency),
-    on_click: AccordionNClicked(id, is_open),
-    is_open: is_open,
-  ))
+  case lookup_processed_dep {
+    Ok(processed_dep) -> {
+      accordion.view(accordion.Config(
+        title: accordion_title(processed_dep),
+        body: view_processed_dependency(processed_dep),
+        on_click: AccordionNClicked(dep_name, is_open),
+        is_open: is_open,
+      ))
+    }
+    Error(_) -> html.text("")
+  }
 }
 
 fn accordion_title(
@@ -490,20 +547,25 @@ fn view_has_releases(releases: List(common.Release)) -> Element(msg) {
           option.None -> release_url(release.url)
 
           option.Some(release_body) -> {
-            popover.view(popover.Props(
-              trigger: [release_url(release.url)],
-              content: html.div([class("rounded-md p-2 h-84 z-[99999]")], [
-                html.div(
-                  [
-                    attribute.attribute(
-                      "dangerous-unescaped-html",
-                      release_body,
+            case release_body {
+              "" -> release_url(release.url)
+              _ ->
+                popover.view(popover.Props(
+                  trigger: [release_url(release.url)],
+                  content: html.div([class("rounded-md p-2 overflow-y-auto")], [
+                    html.div(
+                      [
+                        class("w-[24rem] max-h-72"),
+                        attribute.attribute(
+                          "dangerous-unescaped-html",
+                          release_body,
+                        ),
+                      ],
+                      [],
                     ),
-                  ],
-                  [],
-                ),
-              ]),
-            ))
+                  ]),
+                ))
+            }
           }
         },
       ])
