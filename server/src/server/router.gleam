@@ -2,6 +2,7 @@ import common
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/http.{Post}
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
@@ -19,8 +20,7 @@ pub fn handle_request(
   make_context: fn() -> web.Context,
 ) -> wisp.Response {
   let context = make_context()
-  use request <- web.middleware(req)
-  use <- wisp.require_method(req, Post)
+  use request <- web.middleware(req, context)
   use json <- wisp.require_json(req)
 
   case wisp.path_segments(request) {
@@ -30,10 +30,12 @@ pub fn handle_request(
 }
 
 fn get_processed_dependencies(
-  _: Request,
+  req: Request,
   json: Dynamic,
   context: web.Context,
 ) -> wisp.Response {
+  use <- wisp.require_method(req, Post)
+
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {

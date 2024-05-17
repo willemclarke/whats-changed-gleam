@@ -11,7 +11,7 @@ pub fn process_dependencies(
   let expect = lustre_http.expect_json(decoder, msg)
   let body = to_body(dependencies)
 
-  lustre_http.post("http://localhost:8080/process", body, expect)
+  lustre_http.post("", body, expect)
 }
 
 fn to_body(dependencies: List(common.ClientDependency)) {

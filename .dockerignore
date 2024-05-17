@@ -1,0 +1,4 @@
+#sqlite
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal

@@ -25,7 +25,6 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import lustre_http
-import tardis
 
 // -- Model --
 pub type Model {
@@ -589,12 +588,7 @@ fn release_url(url: String) -> Element(msg) {
 // -- Main --
 
 pub fn main() {
-  let assert Ok(main) = tardis.single("main")
-
-  lustre.application(init, update, view)
-  |> tardis.wrap(with: main)
-  |> lustre.start("#app", Nil)
-  |> tardis.activate(with: main)
-
+  let app = lustre.application(init, update, view)
+  let assert Ok(_) = lustre.start(app, "#app", Nil)
   Nil
 }

@@ -1,6 +1,7 @@
 import dot_env
 import dot_env/env
 import gleam/erlang/process
+import gleam/io
 import mist
 import server/database
 import server/router
@@ -17,8 +18,19 @@ pub fn main() {
   // Initialisation that is run per-request
   let make_context = fn() -> web.Context {
     let assert Ok(token) = env.get("GITHUB_TOKEN")
+    let assert Ok(environment) = env.get("ENVIRONMENT")
+
+    let assert Ok(priv) = wisp.priv_directory("server")
+    let static_directory = priv <> "/static"
+    io.debug(#("static_directory", static_directory))
     let db = database.connect(database_name)
-    web.Context(github_token: token, db: db)
+
+    web.Context(
+      github_token: token,
+      environment: environment,
+      static_directory: static_directory,
+      db: db,
+    )
   }
 
   let assert Ok(_) =
