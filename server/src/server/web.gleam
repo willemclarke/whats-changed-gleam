@@ -1,13 +1,19 @@
-import wisp
-import server/database
 import gleam/http
+import server/database
+import wisp
 
 pub type Context {
-  Context(github_token: String, db: database.Connection)
+  Context(
+    github_token: String,
+    environment: String,
+    static_directory: String,
+    db: database.Connection,
+  )
 }
 
 pub fn middleware(
   req: wisp.Request,
+  context: Context,
   handle_request: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
   let req = wisp.method_override(req)
@@ -15,6 +21,11 @@ pub fn middleware(
   use <- wisp.log_request(req)
   use <- wisp.rescue_crashes
   use req <- wisp.handle_head(req)
+  use <- wisp.serve_static(
+    req,
+    under: "/static",
+    from: context.static_directory,
+  )
 
   handle_request(req)
 }

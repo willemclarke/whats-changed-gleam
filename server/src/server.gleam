@@ -17,12 +17,23 @@ pub fn main() {
   // Initialisation that is run per-request
   let make_context = fn() -> web.Context {
     let assert Ok(token) = env.get("GITHUB_TOKEN")
+    let assert Ok(environment) = env.get("ENVIRONMENT")
+    let assert Ok(priv) = wisp.priv_directory("server")
+
+    let static_directory = priv <> "/static"
     let db = database.connect(database_name)
-    web.Context(github_token: token, db: db)
+
+    web.Context(
+      github_token: token,
+      environment: environment,
+      static_directory: static_directory,
+      db: db,
+    )
   }
 
   let assert Ok(_) =
-    wisp.mist_handler(router.handle_request(_, make_context), secret_key_base)
+    router.handle_request(_, make_context)
+    |> wisp.mist_handler(secret_key_base)
     |> mist.new()
     |> mist.port(8080)
     |> mist.start_http

@@ -1,6 +1,5 @@
 import common
 import gleam/dict
-import gleam/dynamic.{type Dynamic}
 import gleam/http.{Post}
 import gleam/list
 import gleam/option
@@ -10,6 +9,7 @@ import kirala/bbmarkdown/html_renderer
 import server/database
 import server/error
 import server/github
+import server/html as app_html
 import server/npm
 import server/web
 import wisp.{type Request}
@@ -19,21 +19,21 @@ pub fn handle_request(
   make_context: fn() -> web.Context,
 ) -> wisp.Response {
   let context = make_context()
-  use request <- web.middleware(req)
-  use <- wisp.require_method(req, Post)
-  use json <- wisp.require_json(req)
+  use request <- web.middleware(req, context)
 
   case wisp.path_segments(request) {
-    ["process"] -> get_processed_dependencies(request, json, context)
-    _ -> wisp.not_found()
+    ["process"] -> get_processed_dependencies(request, context)
+    _ -> app_html.serve_html()
   }
 }
 
 fn get_processed_dependencies(
-  _: Request,
-  json: Dynamic,
+  req: Request,
   context: web.Context,
 ) -> wisp.Response {
+  use <- wisp.require_method(req, Post)
+  use json <- wisp.require_json(req)
+
   let decoded_deps = common.decode_dependencies(json)
 
   case decoded_deps {

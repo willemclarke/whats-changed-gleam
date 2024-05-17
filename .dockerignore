@@ -1,0 +1,16 @@
+*.beam
+*.ez
+*.sqlite*
+.env
+.git
+.github
+.gitignore
+.idea
+README.md
+bin
+build
+erl_crash.dump
+fly.toml
+secrets.env
+sql
+test
