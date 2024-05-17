@@ -12,9 +12,9 @@ COPY .. /build/
 # first build client and move the build contents
 # into /server/priv/static dir
 RUN rm -rf /build/client/build \
-  && cd /build/client \
-  && gleam run -m lustre/dev build app \
-  && mv build/prod/javascript ../server/priv/static
+&& cd /build/client \
+&& gleam run -m lustre/dev build app \
+&& mv priv/static/* ../server/priv/static/
 
 WORKDIR /build
 
