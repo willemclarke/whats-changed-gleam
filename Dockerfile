@@ -9,12 +9,12 @@ ENV ENVIRONMENT="production"
 # Add project code
 COPY .. /build/
 
-# first build client and move the build contents
-# into /server/priv/static dir
+# first build client and move the priv/static contents (client.mjs, client.css)
+# into `/server/priv/static`
 RUN rm -rf /build/client/build \
-&& cd /build/client \
-&& gleam run -m lustre/dev build app \
-&& mv priv/static/* ../server/priv/static/
+  && cd /build/client \
+  && gleam run -m lustre/dev build app \
+  && mv priv/static/* ../server/priv/static/
 
 WORKDIR /build
 

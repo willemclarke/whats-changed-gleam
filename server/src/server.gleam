@@ -1,7 +1,6 @@
 import dot_env
 import dot_env/env
 import gleam/erlang/process
-import gleam/io
 import mist
 import server/database
 import server/router
@@ -19,10 +18,9 @@ pub fn main() {
   let make_context = fn() -> web.Context {
     let assert Ok(token) = env.get("GITHUB_TOKEN")
     let assert Ok(environment) = env.get("ENVIRONMENT")
-
     let assert Ok(priv) = wisp.priv_directory("server")
+
     let static_directory = priv <> "/static"
-    io.debug(#("static_directory", static_directory))
     let db = database.connect(database_name)
 
     web.Context(
@@ -34,7 +32,8 @@ pub fn main() {
   }
 
   let assert Ok(_) =
-    wisp.mist_handler(router.handle_request(_, make_context), secret_key_base)
+    router.handle_request(_, make_context)
+    |> wisp.mist_handler(secret_key_base)
     |> mist.new()
     |> mist.port(8080)
     |> mist.start_http

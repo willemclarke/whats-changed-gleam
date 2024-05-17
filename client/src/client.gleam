@@ -435,7 +435,7 @@ fn view_package_json_input(model: Model) -> Element(Msg) {
     case model.is_input_hidden {
       True -> html.text("")
       False ->
-        html.div([class("h-full flex flex-col")], [
+        html.div([class("h-full flex flex-col gap-y-2")], [
           html.textarea(
             [
               class(
