@@ -12,7 +12,6 @@ import gleam/regex
 import gleam/result
 import gleam/string
 import gleam/string_builder.{type StringBuilder}
-import kirala/bbmarkdown/html_renderer
 import server/error
 import server/npm
 import server/verl
@@ -226,7 +225,6 @@ fn from_github_releases(
 ) -> List(common.Release) {
   list.map(github_releases, fn(release) {
     let assert Ok(version) = version_from_tag_name(release.tag_name)
-    let html_body = html_renderer.convert(option.unwrap(release.body, ""))
 
     common.Release(
       tag_name: release.tag_name,
@@ -235,7 +233,7 @@ fn from_github_releases(
       created_at: release.created_at,
       url: release.html_url,
       version: version,
-      body: option.Some(html_body),
+      body: release.body,
     )
   })
 }

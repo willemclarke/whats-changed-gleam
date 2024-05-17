@@ -3,8 +3,10 @@ import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/http.{Post}
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/set
+import kirala/bbmarkdown/html_renderer
 import server/database
 import server/error
 import server/github
@@ -66,9 +68,9 @@ fn processed_dependencies_handler(
       database.insert_releases(db, insertable_releases)
 
       let external_dependency_map =
-        common.dependency_map_from_processed_dependencies(
+        common.dependency_map_from_processed_dependencies(with_html_body(
           external_processed_deps,
-        )
+        ))
 
       let combined = dict.merge(cache_dependecy_map, external_dependency_map)
       wisp.json_response(common.encode_dependency_map(combined), 200)
@@ -117,10 +119,10 @@ fn get_external_processed_dependencies(
       |> processed_dependency_from_releases(package.dependency_name)
     })
 
-  let to_not_found =
+  let not_found_dependencies =
     list.map(separated_packages.not_found_packages, common.as_not_found)
 
-  list.append(processed_dependencies, to_not_found)
+  list.append(processed_dependencies, not_found_dependencies)
 }
 
 fn processed_dependency_from_releases(
@@ -174,4 +176,27 @@ fn separate_packages(
       }
     },
   )
+}
+
+// before sending the releases fetched from github to client
+// we want to turn the markdown release body into a html string
+fn with_html_body(
+  processed_dependencies: List(common.ProcessedDependency),
+) -> List(common.ProcessedDependency) {
+  list.map(processed_dependencies, fn(dependency) {
+    case dependency {
+      common.HasReleases(_, name, releases) -> {
+        common.as_has_releases(name, do_html_body(releases))
+      }
+      common.NoReleases(_, name) -> common.as_no_releases(name)
+      common.NotFound(_, name) -> common.as_not_found(name)
+    }
+  })
+}
+
+fn do_html_body(releases: List(common.Release)) -> List(common.Release) {
+  list.map(releases, fn(release) {
+    let html_body = html_renderer.convert(option.unwrap(release.body, ""))
+    common.Release(..release, body: option.Some(html_body))
+  })
 }
