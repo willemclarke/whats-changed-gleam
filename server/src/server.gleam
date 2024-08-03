@@ -12,7 +12,6 @@ pub fn main() {
   configure_env()
 
   let secret_key_base = wisp.random_string(64)
-  let database_name = database_name()
 
   // Initialisation that is run per-request
   let make_context = fn() -> web.Context {
@@ -21,6 +20,7 @@ pub fn main() {
     let assert Ok(priv) = wisp.priv_directory("server")
 
     let static_directory = priv <> "/static"
+    let database_name = database_name(static_directory)
     let db = database.connect(database_name)
 
     web.Context(
@@ -49,9 +49,9 @@ fn configure_env() -> Nil {
   ))
 }
 
-fn database_name() {
+fn database_name(static_directory: String) {
   case env.get("DATABASE_PATH") {
     Ok(path) -> path
-    Error(_) -> "./database.sqlite"
+    Error(_) -> static_directory <> "/database.sqlite"
   }
 }

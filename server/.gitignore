@@ -6,5 +6,6 @@ erl_crash.dump
 database.sqlite
 database.sqlite-shm
 database.sqlite-wal
-/priv/static/client.css
-/priv/static.client.mjs
+/priv/static/database.sqlite
+/priv/static/database.sqlite-shm
+/priv/static/database.sqlite-wal

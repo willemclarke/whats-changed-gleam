@@ -29,7 +29,7 @@ pub fn view(config: Config(msg)) {
       display: html.div(
         [
           class(
-            "max-h-96 flex-1 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
+            "max-h-96 min-h-96 flex-1 animate-fadein overflow-y-scroll p-3 border border-b-0 border-gray-200 dark:border-gray-700 dark:bg-gray-900",
           ),
         ],
         [config.body],

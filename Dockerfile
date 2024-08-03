@@ -1,8 +1,8 @@
-# using --platform=linux/amd64 for building this locally
-FROM --platform=linux/amd64 ghcr.io/gleam-lang/gleam:v1.1.0-erlang
+# using --platform=linux/amd64 ghcr.io/gleam-lang/gleam:v1.4.0-erlang for building this locally
+# FROM --platform=linux/amd64 ghcr.io/gleam-lang/gleam:v1.4.0-erlang
 
 # Use this when deploying on fly.op
-# FROM ghcr.io/gleam-lang/gleam:v1.1.0-erlang
+FROM ghcr.io/gleam-lang/gleam:v1.4.0-erlang
 
 ENV ENVIRONMENT="production"
 
@@ -25,6 +25,7 @@ RUN cd /build/server \
   && rm -r /build
 
 # Run the server
+EXPOSE 8080
 WORKDIR /app
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["run"]

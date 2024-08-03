@@ -105,8 +105,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       // if the size of the dict > 0 and the search_term is "", it means we've filtered
       // the set of results, but backspaced, so we want to show the original unfiltered set of data.
-      // otherwise, do nothing  
-      let accordions_test = case dict.size(filtered_accordions), search_term {
+      // otherwise, show the filtered accordions
+      let updated_accordions = case dict.size(filtered_accordions), search_term {
         _, "" -> set_accordions_dict(model.dependency_map)
         _, _ -> filtered_accordions
       }
@@ -115,7 +115,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         Model(
           ..model,
           search_term: search_term,
-          accordions_dict: accordions_test,
+          accordions_dict: updated_accordions,
         ),
         effect.none(),
       )
